@@ -20,10 +20,11 @@ It includes:
 * checkout and order creation
 * order history and status
 * admin interface
-* PostgreSQL and migrations
+* local PostgreSQL, Neon production PostgreSQL and migrations
 * Docker
 * Azure deployment
 * Bicep infrastructure
+* GitHub Container Registry
 * CI/CD
 * secrets management
 * logging
@@ -51,7 +52,7 @@ Verify:
 
 Deploy the minimal application before building the full product.
 
-Set up the initial Azure infrastructure, Bicep and CI/CD deployment flow.
+Set up the initial Azure infrastructure with Bicep, configure the Neon production database, publish backend images through GitHub Container Registry and establish the CI/CD deployment flow.
 
 ### 4. Authentication and authorization
 

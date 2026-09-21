@@ -34,9 +34,9 @@ The backend should keep a simple separation between routes, application logic an
 
 ## Database
 
-PostgreSQL is the primary database locally and in production.
+PostgreSQL is the primary database locally, in CI and in production.
 
-Production uses Azure Database for PostgreSQL Flexible Server.
+Production uses managed PostgreSQL hosted by Neon. Azure Container Apps connects to Neon over TLS. Local development and CI use a separate local or containerised PostgreSQL instance and must not depend on Neon.
 
 Core entities include:
 
@@ -99,17 +99,20 @@ The frontend may run directly through Vite during local development.
 
 Components should only be containerised when there is a real operational reason.
 
-## Azure
+## Production platform
 
-Production infrastructure uses:
+Azure-hosted application infrastructure uses:
 
 * Azure Static Web Apps
 * Azure Container Apps
-* Azure Database for PostgreSQL Flexible Server
-* Azure Container Registry
 * Azure Key Vault
 * Azure Monitor
 * Application Insights
+
+External managed services use:
+
+* Neon for production PostgreSQL
+* GitHub Container Registry for backend container images
 
 The architecture should use low-cost configurations appropriate for a portfolio application.
 
@@ -119,6 +122,8 @@ Azure resources are defined with Bicep under `/infra`.
 
 Infrastructure should be reproducible from the repository rather than depending on undocumented manual configuration in Azure Portal.
 
+Neon is outside the scope of Bicep. Its required project, database and access configuration must be documented, but no additional infrastructure-as-code tool is introduced solely to provision Neon.
+
 ## Secrets and identity
 
 Secrets must not be stored in source control.
@@ -126,9 +131,11 @@ Secrets must not be stored in source control.
 Use:
 
 * Azure Key Vault for production secrets
-* Managed Identity where appropriate
+* Managed Identity for access to supported Azure resources such as Key Vault
 * `.env` locally
 * `.env.example` without real values
+
+The Neon connection string is stored as a production secret. Connections from the backend must use TLS.
 
 GitHub Actions should authenticate to Azure through OIDC rather than long-lived Azure credentials.
 
@@ -146,7 +153,9 @@ Pull requests should run relevant:
 
 Merge to `main` should deploy the production application automatically.
 
-The deployment flow should include database migrations and a production health check.
+The backend image is published to GitHub Container Registry and deployed to Azure Container Apps.
+
+The deployment flow should apply database migrations safely to Neon and include a production health check.
 
 ## Testing
 
@@ -190,6 +199,8 @@ Application Insights and Azure Monitor provide visibility into:
 * database calls
 * traces
 * relevant metrics
+
+OpenTelemetry should expose database dependency spans from the application where practical. Neon remains responsible for monitoring and operating the database platform itself.
 
 Sensitive credentials, tokens and unnecessary personal information must not be logged.
 

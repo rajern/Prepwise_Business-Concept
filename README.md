@@ -28,7 +28,7 @@ Core architecture:
 
 `React + TypeScript → FastAPI → PostgreSQL`
 
-Production infrastructure is hosted on Microsoft Azure.
+The frontend and backend are hosted on Microsoft Azure. The production PostgreSQL database is hosted by Neon.
 
 Main technologies:
 
@@ -39,7 +39,8 @@ Main technologies:
 * Microsoft Entra External ID
 * Azure Container Apps
 * Azure Static Web Apps
-* Azure Database for PostgreSQL
+* Neon PostgreSQL
+* GitHub Container Registry
 * Azure Key Vault
 * Azure Monitor and Application Insights
 * OpenTelemetry

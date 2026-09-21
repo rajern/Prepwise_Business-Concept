@@ -154,16 +154,15 @@ Provision the minimum production infrastructure required for the vertical slice.
 Include:
 
 * Azure Container Apps
-* Azure Container Registry
-* Azure Database for PostgreSQL Flexible Server
 * Azure Static Web Apps
 * Key Vault
 * monitoring resources required by the architecture
 
 **Acceptance criteria:**
 
-* infrastructure is represented in `/infra`
-* deployment does not depend on undocumented manual resource creation
+* Azure infrastructure is represented in `/infra`
+* required Neon configuration is documented separately and is not presented as Bicep-managed infrastructure
+* Azure deployment does not depend on undocumented manual resource creation
 * environment-specific values are configurable
 
 ---
@@ -175,7 +174,7 @@ Include:
 * Key Vault
 * Managed Identity where appropriate
 * secure application configuration
-* database connection configuration
+* Neon production database and TLS connection configuration
 * GitHub → Azure OIDC authentication
 
 **Acceptance criteria:**
@@ -183,6 +182,8 @@ Include:
 * production secrets are not stored in GitHub or source code
 * backend can access required secrets securely
 * GitHub Actions does not use a long-lived Azure credential
+* production uses Neon while local development and CI remain on separate PostgreSQL instances
+* manual Neon setup required outside the repository is documented
 
 ---
 
@@ -212,10 +213,10 @@ On merge to `main`:
 
 * run required CI checks
 * build backend image
-* push image to Azure Container Registry
+* push image to GitHub Container Registry
 * deploy backend
 * deploy frontend
-* apply migrations safely
+* apply migrations safely to Neon
 * verify backend health
 
 **Acceptance criteria:**
@@ -223,7 +224,7 @@ On merge to `main`:
 * minimal application is publicly deployed
 * deployment is triggered from GitHub Actions
 * frontend successfully calls the deployed API
-* production PostgreSQL is used
+* Neon PostgreSQL is used in production
 
 ---
 
@@ -502,8 +503,9 @@ Instrument the backend.
 * requests appear in Application Insights
 * backend latency is visible
 * exceptions are visible
-* PostgreSQL/dependency activity is traceable where practical
+* Neon PostgreSQL dependency activity is traceable from the application where practical
 * traces can connect relevant operations through a request
+* Neon platform-level monitoring remains separate from Azure application monitoring
 
 ---
 
@@ -569,7 +571,7 @@ Verify:
 * secure environment configuration
 * no sensitive data in logs
 * admin endpoints protected
-* database not unnecessarily publicly exposed
+* Neon connections require TLS and production credentials are protected
 
 ---
 

@@ -58,7 +58,7 @@ The product has straightforward resources and workflows. GraphQL would add compl
 
 ### PostgreSQL
 
-Use PostgreSQL locally, in tests and in production.
+Use PostgreSQL locally, in tests and in production. Production PostgreSQL is hosted by Neon, while local development and CI use separate local or containerised PostgreSQL instances.
 
 Do not substitute SQLite for integration testing.
 
@@ -88,7 +88,7 @@ Authorization is always enforced by the backend.
 
 ### Microsoft Azure
 
-Azure is the production cloud platform for the project.
+Azure is the primary production hosting platform for the frontend, backend, secrets and application observability. The production database is an explicit exception and is hosted by Neon.
 
 ### Azure Container Apps
 
@@ -98,11 +98,29 @@ The FastAPI backend runs as a Docker container in Azure Container Apps.
 
 The React frontend is deployed separately as a static web application.
 
+### Neon PostgreSQL
+
+Use Neon for the managed production PostgreSQL database.
+
+Azure Database for PostgreSQL Flexible Server is more Azure-native, but its ongoing fixed cost is not justified for a portfolio application with very low traffic. Neon preserves the relevant PostgreSQL, SQLAlchemy, Alembic, relational modelling, query and transaction experience while allowing the deployed application to remain available at little or no database cost within the applicable usage limits.
+
+Azure Container Apps connects to Neon over TLS. Neon operates and monitors the database platform; Azure observability covers the application, backend traffic and database dependency spans emitted by the application.
+
+Neon is configured separately from the Azure infrastructure. Do not introduce Terraform or another infrastructure-as-code tool solely to provision Neon at this stage.
+
+### GitHub Container Registry
+
+Backend container images are published to GitHub Container Registry and pulled by Azure Container Apps.
+
+Azure Container Registry is not used because its fixed cost is unnecessary for the expected traffic and GitHub Container Registry already fits the GitHub Actions delivery workflow.
+
 ### Bicep
 
 Azure infrastructure is defined as code with Bicep.
 
 Bicep is preferred over Terraform because this project is Azure-specific and the additional complexity is lower.
+
+Bicep covers only Azure resources and must not imply that Neon is provisioned through the Azure deployment.
 
 ### GitHub Actions
 

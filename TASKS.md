@@ -67,6 +67,8 @@ For each task:
 
 ### T1.3 — Add PostgreSQL and Docker Compose
 
+**Status:** Complete
+
 **Implement:**
 
 * local PostgreSQL container
@@ -86,6 +88,8 @@ For each task:
 ## 2. Database and minimal vertical slice
 
 ### T2.1 — Create initial database models
+
+**Status:** Complete
 
 Create the core relational model for:
 
@@ -110,6 +114,8 @@ Create the core relational model for:
 ---
 
 ### T2.2 — Set up Alembic migrations
+
+**Status:** Complete
 
 **Acceptance criteria:**
 

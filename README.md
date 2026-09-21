@@ -142,7 +142,21 @@ python -m venv .venv
 
 The frontend is available at `http://localhost:3000`. The backend health endpoint is available at `http://localhost:8000/health`.
 
-PostgreSQL through Docker Compose is added in T1.3. Copy `.env.example` to `.env` when environment configuration is introduced; never commit `.env`.
+Run the containerised backend and PostgreSQL from the repository root:
+
+```powershell
+docker compose up --build -d
+docker compose exec backend python -m alembic upgrade head
+Invoke-RestMethod http://localhost:8000/health/database
+```
+
+Stop the containers without deleting PostgreSQL data:
+
+```powershell
+docker compose down
+```
+
+Copy `.env.example` to `.env` to override local defaults; never commit `.env`.
 
 ## Quality checks
 

@@ -146,6 +146,8 @@ Create realistic development data including approximately:
 
 ### T2.4 — Build the first frontend → API → database flow
 
+**Status:** Complete
+
 Expose meals through FastAPI and display them in React.
 
 **Acceptance criteria:**

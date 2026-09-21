@@ -15,6 +15,12 @@ class Settings(BaseSettings):
 
     app_env: Literal["development", "test", "production"] = "development"
     database_url: str = "postgresql+psycopg://prepwise:change-me@localhost:5432/prepwise"
+    cors_allowed_origins: str = "http://localhost:3000"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Return the configured comma-separated browser origins."""
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache

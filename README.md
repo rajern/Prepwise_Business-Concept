@@ -141,7 +141,9 @@ python -m venv .venv
 .venv\Scripts\python -m uvicorn prepwise_api.main:app --reload --port 8000
 ```
 
-The frontend is available at `http://localhost:3000`. The backend health endpoint is available at `http://localhost:8000/health`.
+The frontend is available at `http://localhost:3000`. The backend health endpoint is available
+at `http://localhost:8000/health`, and the public catalogue endpoint is available at
+`http://localhost:8000/api/meals`. Vite proxies local `/api` requests to FastAPI.
 
 Run the containerised backend and PostgreSQL from the repository root:
 
@@ -153,6 +155,8 @@ Invoke-RestMethod http://localhost:8000/health/database
 ```
 
 The seed command synchronises the development catalogue and can safely be run more than once.
+For a deployed frontend, set `VITE_API_BASE_URL` to the Azure Container Apps origin during the
+frontend build and set the backend's `CORS_ALLOWED_ORIGINS` to the Static Web Apps origin.
 
 Stop the containers without deleting PostgreSQL data:
 
@@ -186,5 +190,6 @@ Run the backend checks from `backend/`:
 
 **Implementation in progress.**
 
-The runnable foundation, relational model, migrations and repeatable development catalogue are
-complete. Development continues with the first frontend-to-database vertical slice in `TASKS.md`.
+The runnable foundation, relational model, migrations, development catalogue and first
+frontend-to-database vertical slice are complete. Development continues with the early Azure
+deployment tasks in `TASKS.md`.

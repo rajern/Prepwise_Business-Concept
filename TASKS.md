@@ -22,6 +22,8 @@ For each task:
 
 ### T1.1 — Initialise frontend and backend
 
+**Status:** Complete
+
 **Goal:** Create the runnable application skeleton.
 
 **Implement:**

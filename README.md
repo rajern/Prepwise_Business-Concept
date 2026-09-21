@@ -117,17 +117,35 @@ prepwise/
 
 ## Local development
 
-Local setup instructions will be added as the application foundation is implemented.
+Prerequisites:
 
-The intended development environment uses:
+* Node.js 22 or newer with Corepack
+* Python 3.11 or newer
 
-* React/Vite locally
-* FastAPI in Docker
-* PostgreSQL through Docker Compose
-* environment variables defined from `.env.example`
+Install and run the frontend:
+
+```powershell
+cd frontend
+corepack enable
+pnpm install
+pnpm dev
+```
+
+Install and run the backend:
+
+```powershell
+cd backend
+python -m venv .venv
+.venv\Scripts\python -m pip install -e .
+.venv\Scripts\python -m uvicorn prepwise_api.main:app --reload --port 8000
+```
+
+The frontend is available at `http://localhost:3000`. The backend health endpoint is available at `http://localhost:8000/health`.
+
+PostgreSQL through Docker Compose is added in T1.3. Copy `.env.example` to `.env` when environment configuration is introduced; never commit `.env`.
 
 ## Status
 
-**Planning complete. Implementation next.**
+**Implementation in progress.**
 
-The product scope, architecture, milestones and development sequence have been defined before coding begins.
+The product scope, architecture, milestones and development sequence are defined. The frontend and backend foundations from T1.1 are runnable; development continues through the ordered tasks in `TASKS.md`.

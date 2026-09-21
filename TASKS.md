@@ -46,6 +46,8 @@ For each task:
 
 ### T1.2 — Add development quality tooling
 
+**Status:** Complete
+
 **Implement:**
 
 * Python linting and formatting

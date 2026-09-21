@@ -10,4 +10,3 @@ app = FastAPI(
 async def health() -> dict[str, str]:
     """Return basic process health for local development."""
     return {"status": "ok"}
-

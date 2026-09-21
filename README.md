@@ -136,13 +136,33 @@ Install and run the backend:
 ```powershell
 cd backend
 python -m venv .venv
-.venv\Scripts\python -m pip install -e .
+.venv\Scripts\python -m pip install -e ".[dev]"
 .venv\Scripts\python -m uvicorn prepwise_api.main:app --reload --port 8000
 ```
 
 The frontend is available at `http://localhost:3000`. The backend health endpoint is available at `http://localhost:8000/health`.
 
 PostgreSQL through Docker Compose is added in T1.3. Copy `.env.example` to `.env` when environment configuration is introduced; never commit `.env`.
+
+## Quality checks
+
+Run the frontend checks from `frontend/`:
+
+```powershell
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+```
+
+Run the backend checks from `backend/`:
+
+```powershell
+.venv\Scripts\python -m ruff check .
+.venv\Scripts\python -m ruff format --check .
+.venv\Scripts\python -m mypy .
+.venv\Scripts\python -m pytest
+```
 
 ## Status
 

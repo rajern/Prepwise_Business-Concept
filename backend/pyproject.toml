@@ -16,6 +16,9 @@ dependencies = [
     "uvicorn[standard]>=0.30,<1.0",
 ]
 
+[project.scripts]
+prepwise-seed = "prepwise_api.seed:main"
+
 [project.optional-dependencies]
 dev = [
     "httpx2>=2.0,<3.0",

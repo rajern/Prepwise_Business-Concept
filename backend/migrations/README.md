@@ -17,3 +17,9 @@ Apply or revert migrations:
 ```
 
 Seed data must not be added to schema migrations.
+
+Seed the development catalogue separately after applying migrations:
+
+```powershell
+.venv\Scripts\python -m prepwise_api.seed
+```

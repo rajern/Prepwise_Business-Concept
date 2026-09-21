@@ -121,6 +121,7 @@ Prerequisites:
 
 * Node.js 22 or newer with Corepack
 * Python 3.11 or newer
+* Docker Desktop for the containerised development environment
 
 Install and run the frontend:
 
@@ -147,8 +148,11 @@ Run the containerised backend and PostgreSQL from the repository root:
 ```powershell
 docker compose up --build -d
 docker compose exec backend python -m alembic upgrade head
+docker compose exec backend python -m prepwise_api.seed
 Invoke-RestMethod http://localhost:8000/health/database
 ```
+
+The seed command synchronises the development catalogue and can safely be run more than once.
 
 Stop the containers without deleting PostgreSQL data:
 
@@ -182,4 +186,5 @@ Run the backend checks from `backend/`:
 
 **Implementation in progress.**
 
-The product scope, architecture, milestones and development sequence are defined. The frontend and backend foundations from T1.1 are runnable; development continues through the ordered tasks in `TASKS.md`.
+The runnable foundation, relational model, migrations and repeatable development catalogue are
+complete. Development continues with the first frontend-to-database vertical slice in `TASKS.md`.

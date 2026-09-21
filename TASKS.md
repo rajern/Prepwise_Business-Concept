@@ -127,6 +127,8 @@ Create the core relational model for:
 
 ### T2.3 — Add seed data
 
+**Status:** Complete
+
 Create realistic development data including approximately:
 
 * 10–15 meals

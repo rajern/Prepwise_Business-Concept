@@ -10,6 +10,7 @@ param backendContainerImage = 'mcr.microsoft.com/azuredocs/containerapps-hellowo
 param backendContainerPort = 80
 
 param logDailyQuotaGb = '0.1'
+param databaseSecretName = 'database-url'
 param tags = {
   project: 'Prepwise-Business-Concept'
   purpose: 'portfolio'

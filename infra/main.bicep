@@ -31,6 +31,9 @@ param backendContainerPort int
 @description('Maximum daily Log Analytics ingestion in GB, represented as a decimal string. Use -1 for no cap.')
 param logDailyQuotaGb string = '0.1'
 
+@description('Name of the existing Key Vault secret containing the production runtime database URL.')
+param databaseSecretName string = 'database-url'
+
 @description('Additional tags applied to every resource.')
 param tags object = {}
 
@@ -79,6 +82,9 @@ module backend './modules/backend-hosting.bicep' = {
     containerPort: backendContainerPort
     corsAllowedOrigins: 'https://${frontend.outputs.defaultHostname}'
     logDailyQuotaGb: logDailyQuotaGb
+    keyVaultName: secrets.outputs.name
+    keyVaultUri: secrets.outputs.uri
+    databaseSecretName: databaseSecretName
     tags: commonTags
   }
 }
@@ -91,3 +97,5 @@ output frontendUrl string = 'https://${frontend.outputs.defaultHostname}'
 output keyVaultName string = secrets.outputs.name
 output keyVaultUri string = secrets.outputs.uri
 output applicationInsightsName string = backend.outputs.applicationInsightsName
+output backendIdentityName string = backend.outputs.managedIdentityName
+output backendIdentityPrincipalId string = backend.outputs.managedIdentityPrincipalId

@@ -1,7 +1,10 @@
 # Database migrations
 
-Alembic manages the PostgreSQL schema. It reads the same `DATABASE_URL` as the FastAPI
-application.
+Alembic manages the PostgreSQL schema and reads `DATABASE_URL`. Local development uses the same
+development URL as the application. A production migration process must instead populate
+`DATABASE_URL` from the Key Vault secret `database-migration-url`, which uses the dedicated
+migration/owner role and requires TLS. That credential must never be injected into the running
+Container App.
 
 Create a migration after changing the SQLAlchemy models:
 

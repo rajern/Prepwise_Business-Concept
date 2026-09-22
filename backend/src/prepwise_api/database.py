@@ -8,10 +8,20 @@ from sqlalchemy.orm import Session
 from prepwise_api.config import get_settings
 
 
+def database_connect_args(app_env: str) -> dict[str, str]:
+    """Require PostgreSQL TLS in production without changing local or test connections."""
+    return {"sslmode": "require"} if app_env == "production" else {}
+
+
 @lru_cache
 def get_engine() -> Engine:
     """Create the shared SQLAlchemy engine from environment configuration."""
-    return create_engine(get_settings().database_url, pool_pre_ping=True)
+    settings = get_settings()
+    return create_engine(
+        settings.database_url,
+        pool_pre_ping=True,
+        connect_args=database_connect_args(settings.app_env),
+    )
 
 
 def get_session() -> Iterator[Session]:

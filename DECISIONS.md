@@ -110,6 +110,10 @@ Azure Database for PostgreSQL Flexible Server is more Azure-native, but its ongo
 
 Azure Container Apps connects to Neon over TLS. Neon operates and monitors the database platform; Azure observability covers the application, backend traffic and database dependency spans emitted by the application.
 
+Production uses separate Neon runtime and migration/owner roles. The running backend receives only
+the runtime connection through a Key Vault reference; the migration credential is reserved for
+the deployment migration step.
+
 Neon is configured separately from the Azure infrastructure. Do not introduce Terraform or another infrastructure-as-code tool solely to provision Neon at this stage.
 
 ### GitHub Container Registry
@@ -135,6 +139,13 @@ Cloud deployment should be part of the normal development workflow rather than a
 ### OIDC
 
 GitHub Actions authenticates to Azure using OIDC rather than long-lived Azure credentials.
+
+### Runtime managed identity
+
+The Container App uses a user-assigned managed identity. Its Key Vault RBAC assignment is scoped
+to the `database-url` secret, rather than the whole vault, and the application receives the value
+through a Container Apps secret reference. Secret values are not part of Bicep outputs or GitHub
+configuration.
 
 ---
 

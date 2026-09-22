@@ -135,7 +135,12 @@ Use:
 * `.env` locally
 * `.env.example` without real values
 
-The Neon connection string is stored as a production secret. Connections from the backend must use TLS.
+The Container App uses a user-assigned managed identity and a Key Vault secret reference to
+receive `DATABASE_URL`. Its RBAC assignment is scoped to the runtime `database-url` secret. The
+separate `database-migration-url` credential is not available to the running application.
+
+The Neon connection strings are stored as production secrets. Runtime and migration roles are
+separate, and all production connections must use TLS.
 
 GitHub Actions should authenticate to Azure through OIDC rather than long-lived Azure credentials.
 

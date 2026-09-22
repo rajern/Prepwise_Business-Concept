@@ -98,6 +98,10 @@ The FastAPI backend runs as a Docker container in Azure Container Apps.
 
 The React frontend is deployed separately as a static web application.
 
+The production Static Web App resource is created in East US 2 because Azure currently blocks
+new-customer creation in West Europe. This does not move the backend or other Azure resources
+from Norway East.
+
 ### Neon PostgreSQL
 
 Use Neon for the managed production PostgreSQL database.

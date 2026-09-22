@@ -15,6 +15,9 @@ The production parameter file creates:
 * one Log Analytics workspace with a low daily ingestion cap
 * one workspace-based Application Insights resource
 
+The production Static Web App uses `eastus2`. Azure currently rejects new-customer Static Web
+Apps deployments in `westeurope`; the remaining Azure resources stay in `norwayeast`.
+
 Container Apps uses consumption-based scaling from zero to one replica. The committed production
 parameters deploy a public placeholder image. T3.4 replaces it with a versioned Prepwise image
 from GitHub Container Registry.

@@ -163,6 +163,8 @@ Expose meals through FastAPI and display them in React.
 
 ### T3.1 — Define initial Azure infrastructure with Bicep
 
+**Status:** Complete
+
 Provision the minimum production infrastructure required for the vertical slice.
 
 Include:

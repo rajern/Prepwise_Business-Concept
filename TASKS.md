@@ -203,6 +203,8 @@ Include:
 
 ### T3.3 — Create initial CI pipeline
 
+**Status:** Complete
+
 For pull requests run:
 
 * backend lint

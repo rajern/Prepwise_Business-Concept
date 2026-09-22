@@ -186,6 +186,10 @@ Run the backend checks from `backend/`:
 .venv\Scripts\python -m pytest
 ```
 
+Pull requests run the same backend and frontend checks in GitHub Actions and build the backend
+Docker image. The workflow has read-only repository permissions and does not use deployment
+credentials or production secrets.
+
 ## Status
 
 **Implementation in progress.**

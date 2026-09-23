@@ -76,6 +76,9 @@ This makes the application behaviour more realistic and creates meaningful backe
 
 Use managed customer authentication instead of implementing password storage ourselves.
 
+The React SPA uses browser-delegated MSAL authentication with Microsoft-hosted pages and the
+authorization code flow with PKCE. No client secret or implicit grant is used by the SPA.
+
 ### Local application roles
 
 Prepwise keeps `customer` and `admin` roles in its own application data.

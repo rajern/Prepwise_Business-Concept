@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 
 import { fetchMeals, type Meal } from './api/meals'
+import { AuthControls } from './auth/AuthControls'
 
 const nokFormatter = new Intl.NumberFormat('nb-NO', {
   style: 'currency',
@@ -8,7 +9,11 @@ const nokFormatter = new Intl.NumberFormat('nb-NO', {
   maximumFractionDigits: 0,
 })
 
-export function App() {
+interface AppProps {
+  apiScope: string
+}
+
+export function App({ apiScope }: AppProps) {
   const [meals, setMeals] = useState<Meal[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [requestNumber, setRequestNumber] = useState(0)
@@ -36,8 +41,14 @@ export function App() {
 
   return (
     <main className="app-shell">
+      <header className="topbar">
+        <a className="brand" href="/" aria-label="Prepwise home">
+          Prepwise
+        </a>
+        <AuthControls apiScope={apiScope} />
+      </header>
       <section className="hero">
-        <p className="eyebrow">Prepwise</p>
+        <p className="eyebrow">Pickup meals in Oslo</p>
         <h1>Ready meals, without the guesswork.</h1>
         <p className="summary">
           Pick balanced meals with clear nutrition and collect them from a

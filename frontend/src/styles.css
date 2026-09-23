@@ -25,7 +25,75 @@ button {
 .app-shell {
   width: min(100% - 2rem, 76rem);
   margin: 0 auto;
-  padding: 4rem 0 6rem;
+  padding: 1.5rem 0 6rem;
+}
+
+.topbar {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.brand {
+  color: #1f3b27;
+  font-size: 1.125rem;
+  font-weight: 850;
+  letter-spacing: -0.035em;
+  text-decoration: none;
+}
+
+.auth-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.auth-controls--signed-in {
+  text-align: right;
+}
+
+.auth-account,
+.auth-status {
+  margin: 0;
+}
+
+.auth-account {
+  color: #263229;
+  font-size: 0.875rem;
+  font-weight: 750;
+}
+
+.auth-status {
+  color: #68736b;
+  font-size: 0.75rem;
+}
+
+.auth-status--error {
+  color: #8c3327;
+}
+
+.auth-button {
+  border: 1px solid #294c32;
+  border-radius: 999px;
+  background: #294c32;
+  padding: 0.65rem 1rem;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 750;
+}
+
+.auth-button--secondary {
+  background: transparent;
+  color: #294c32;
+}
+
+.auth-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .hero {
@@ -232,6 +300,15 @@ h1 {
 
   .hero {
     padding: 3rem 0;
+  }
+
+  .topbar,
+  .auth-controls {
+    align-items: flex-start;
+  }
+
+  .auth-controls--signed-in {
+    flex-wrap: wrap;
   }
 
   .section-heading {

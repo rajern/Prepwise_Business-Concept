@@ -30,7 +30,7 @@ describe('App', () => {
   it('shows a loading state while the menu request is pending', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)))
 
-    render(<App />)
+    render(<App apiScope="api://prepwise/access_as_user" />)
 
     expect(screen.getByRole('status')).toHaveTextContent('Loading the menu')
   })
@@ -42,7 +42,7 @@ describe('App', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<App />)
+    render(<App apiScope="api://prepwise/access_as_user" />)
 
     expect(
       await screen.findByRole('heading', { name: meal.name }),
@@ -60,7 +60,7 @@ describe('App', () => {
       vi.fn().mockResolvedValue({ ok: false, status: 503 }),
     )
 
-    render(<App />)
+    render(<App apiScope="api://prepwise/access_as_user" />)
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'We could not load the menu',

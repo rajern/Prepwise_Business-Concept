@@ -59,6 +59,9 @@ Order creation must be transactional, and order items must preserve relevant his
 
 Authentication uses Microsoft Entra External ID.
 
+The React SPA uses browser-delegated authentication through MSAL and the OAuth 2.0 authorization
+code flow with PKCE. Microsoft hosts the combined sign-up/sign-in and password recovery pages.
+
 The frontend authenticates the user and sends access tokens to the API.
 
 FastAPI validates the token and maps the external identity to the local user record.

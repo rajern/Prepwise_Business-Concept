@@ -129,6 +129,7 @@ Install and run the frontend:
 cd frontend
 corepack enable
 pnpm install
+Copy-Item .env.example .env.local
 pnpm dev
 ```
 
@@ -157,6 +158,11 @@ Invoke-RestMethod http://localhost:8000/health/database
 The seed command synchronises the development catalogue and can safely be run more than once.
 For a deployed frontend, set `VITE_API_BASE_URL` to the Azure Container Apps origin during the
 frontend build and set the backend's `CORS_ALLOWED_ORIGINS` to the Static Web Apps origin.
+
+The frontend uses browser-delegated Microsoft Entra External ID for customer sign-up, sign-in and
+sign-out. Its public MSAL configuration is documented in
+[`docs/ENTRA_EXTERNAL_ID.md`](./docs/ENTRA_EXTERNAL_ID.md). Backend token validation and local-user
+mapping are intentionally deferred to T4.2.
 
 Stop the containers without deleting PostgreSQL data:
 

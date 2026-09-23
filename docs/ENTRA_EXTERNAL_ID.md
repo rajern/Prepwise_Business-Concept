@@ -18,7 +18,15 @@ The manually managed External ID resources are:
 * delegated API scope: `api://82773ea0-fcf3-4874-81c3-3cd0da7d00c7/access_as_user`
 * user flow: `prepwise-sign-up-sign-in`
 
-The SPA registration uses these redirect URIs:
+The SPA registration uses these redirect bridge URIs for sign-up and sign-in:
+
+* `http://localhost:3000/redirect.html`
+* `https://nice-island-080f30a0f.6.azurestaticapps.net/redirect.html`
+
+MSAL v5 completes authentication on this dedicated redirect bridge page. The bridge broadcasts the
+authorization response to the main application frame and does not render the React application.
+The existing application-root URIs remain registered because logout returns directly to those
+locations:
 
 * `http://localhost:3000/`
 * `https://nice-island-080f30a0f.6.azurestaticapps.net/`

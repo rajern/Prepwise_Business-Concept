@@ -9,7 +9,7 @@ const environment = {
 }
 
 describe('Microsoft Entra frontend configuration', () => {
-  it('builds an External ID authority and exact root redirect URI', () => {
+  it('uses the redirect bridge for login and the app root after logout', () => {
     const settings = loadAuthSettings(environment)
     const configuration = createMsalConfig(settings, 'http://localhost:3000')
 
@@ -18,7 +18,7 @@ describe('Microsoft Entra frontend configuration', () => {
       authority: 'https://prepwisecustomers.ciamlogin.com/',
       clientId: 'spa-client-id',
       knownAuthorities: ['prepwisecustomers.ciamlogin.com'],
-      redirectUri: 'http://localhost:3000/',
+      redirectUri: 'http://localhost:3000/redirect.html',
       postLogoutRedirectUri: 'http://localhost:3000/',
     })
   })

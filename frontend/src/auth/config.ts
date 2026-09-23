@@ -55,7 +55,8 @@ export function createMsalConfig(
   appOrigin: string = window.location.origin,
 ): Configuration {
   const authorityHost = `${settings.tenantSubdomain}.ciamlogin.com`
-  const redirectUri = new URL('/', appOrigin).toString()
+  const applicationRootUri = new URL('/', appOrigin).toString()
+  const redirectUri = new URL('/redirect.html', appOrigin).toString()
 
   return {
     auth: {
@@ -63,7 +64,7 @@ export function createMsalConfig(
       authority: `https://${authorityHost}/`,
       knownAuthorities: [authorityHost],
       redirectUri,
-      postLogoutRedirectUri: redirectUri,
+      postLogoutRedirectUri: applicationRootUri,
     },
     cache: {
       cacheLocation: BrowserCacheLocation.SessionStorage,

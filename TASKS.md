@@ -287,7 +287,7 @@ Implement customer signup and login.
 
 ### T4.3 — Implement customer/admin authorization
 
-**Status:** In progress — implementation underway
+**Status:** Complete
 
 **Acceptance criteria:**
 
@@ -302,6 +302,8 @@ Implement customer signup and login.
 ## 5. Customer product
 
 ### T5.1 — Meal catalogue
+
+**Status:** In progress — implementation underway
 
 Implement:
 
@@ -318,6 +320,8 @@ Implement:
 ---
 
 ### T5.2 — Meal details
+
+**Status:** In progress — implementation underway
 
 Display:
 

@@ -19,6 +19,17 @@ export interface Meal {
   allergens: Allergen[]
 }
 
+export interface MealDetail extends Meal {
+  available: boolean
+}
+
+export class MealRequestError extends Error {
+  constructor(public readonly status: number) {
+    super(`Meal request failed with status ${status}`)
+    this.name = 'MealRequestError'
+  }
+}
+
 export async function fetchMeals(signal?: AbortSignal): Promise<Meal[]> {
   const response = await fetch(apiUrl('/api/meals'), {
     headers: { Accept: 'application/json' },
@@ -26,8 +37,24 @@ export async function fetchMeals(signal?: AbortSignal): Promise<Meal[]> {
   })
 
   if (!response.ok) {
-    throw new Error(`Meal request failed with status ${response.status}`)
+    throw new MealRequestError(response.status)
   }
 
   return (await response.json()) as Meal[]
+}
+
+export async function fetchMeal(
+  mealId: string,
+  signal?: AbortSignal,
+): Promise<MealDetail> {
+  const response = await fetch(apiUrl(`/api/meals/${mealId}`), {
+    headers: { Accept: 'application/json' },
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new MealRequestError(response.status)
+  }
+
+  return (await response.json()) as MealDetail
 }

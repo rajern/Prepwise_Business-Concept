@@ -22,6 +22,11 @@ button {
   font: inherit;
 }
 
+input,
+select {
+  font: inherit;
+}
+
 .app-shell {
   width: min(100% - 2rem, 76rem);
   margin: 0 auto;
@@ -184,6 +189,48 @@ h1 {
   font-weight: 700;
 }
 
+.catalogue-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 0.35fr);
+  gap: 1rem;
+  margin-bottom: 2rem;
+  border: 1px solid #d5ddd1;
+  border-radius: 1rem;
+  background: #fafcf8;
+  padding: 1rem;
+}
+
+.filter-field {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.filter-field span {
+  color: #5e6a61;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.filter-field input,
+.filter-field select {
+  width: 100%;
+  min-height: 2.8rem;
+  border: 1px solid #bfc9bc;
+  border-radius: 0.7rem;
+  outline: none;
+  background: #fff;
+  padding: 0.65rem 0.8rem;
+  color: #263229;
+}
+
+.filter-field input:focus,
+.filter-field select:focus {
+  border-color: #46724e;
+  box-shadow: 0 0 0 3px rgb(70 114 78 / 15%);
+}
+
 .meal-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -192,13 +239,48 @@ h1 {
 
 .meal-card {
   display: flex;
-  min-height: 28rem;
+  min-height: 34rem;
   flex-direction: column;
+  overflow: hidden;
   border: 1px solid #d5ddd1;
   border-radius: 1.25rem;
   background: #fff;
-  padding: 1.5rem;
   box-shadow: 0 1rem 3rem rgb(39 63 43 / 7%);
+}
+
+.meal-artwork {
+  display: block;
+  width: 100%;
+  height: 11rem;
+  object-fit: cover;
+}
+
+.meal-artwork--placeholder {
+  display: grid;
+  place-items: end start;
+  background:
+    radial-gradient(circle at 75% 25%, rgb(235 195 125 / 75%), transparent 26%),
+    radial-gradient(circle at 30% 85%, rgb(101 145 104 / 70%), transparent 32%),
+    linear-gradient(135deg, #e8d9b9, #b9ceb5);
+  padding: 1rem;
+}
+
+.meal-artwork--placeholder span {
+  border-radius: 999px;
+  background: rgb(255 255 255 / 82%);
+  padding: 0.35rem 0.65rem;
+  color: #294c32;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.meal-card__body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: 1.5rem;
 }
 
 .meal-card__topline {
@@ -287,9 +369,146 @@ h1 {
   font-weight: 500;
 }
 
+.detail-button,
+.close-button {
+  border: 1px solid #294c32;
+  border-radius: 999px;
+  background: transparent;
+  color: #294c32;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.detail-button {
+  width: 100%;
+  margin-top: 1.25rem;
+  padding: 0.7rem 1rem;
+}
+
+.detail-button:hover,
+.detail-button:focus-visible,
+.close-button:hover,
+.close-button:focus-visible {
+  background: #294c32;
+  color: #fff;
+}
+
+.meal-detail {
+  margin-bottom: 2rem;
+  border: 1px solid #b8c7b5;
+  border-radius: 1.25rem;
+  background: #fff;
+  padding: 1.25rem;
+  box-shadow: 0 1.5rem 4rem rgb(39 63 43 / 10%);
+}
+
+.meal-detail__header,
+.meal-detail__status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.meal-detail__header {
+  margin-bottom: 1rem;
+}
+
+.meal-detail__header .eyebrow {
+  margin: 0;
+}
+
+.close-button {
+  padding: 0.5rem 0.85rem;
+}
+
+.meal-detail__content {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.2fr);
+  gap: 2rem;
+  align-items: start;
+}
+
+.meal-artwork--detail {
+  height: 100%;
+  min-height: 23rem;
+  border-radius: 0.9rem;
+}
+
+.meal-detail__status-row {
+  color: #294c32;
+}
+
+.meal-detail h3 {
+  margin: 1rem 0 0.75rem;
+  font-size: clamp(2rem, 4vw, 3rem);
+  letter-spacing: -0.045em;
+}
+
+.meal-detail__description {
+  color: #5c665e;
+  line-height: 1.6;
+}
+
+.availability {
+  border-radius: 999px;
+  background: #e7f1e5;
+  padding: 0.35rem 0.65rem;
+  color: #35633c;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.availability--unavailable {
+  background: #f7e8e4;
+  color: #8c3327;
+}
+
+.meal-detail__facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.meal-detail__facts div {
+  border-radius: 0.8rem;
+  background: #f3f6ef;
+  padding: 1rem;
+}
+
+.meal-detail__facts h4 {
+  margin: 0 0 0.5rem;
+  color: #263229;
+  font-size: 0.85rem;
+}
+
+.meal-detail__facts p {
+  margin: 0;
+  color: #5c665e;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.meal-detail__state {
+  padding: 2rem 0.5rem;
+  color: #536057;
+}
+
+.meal-detail__state--error {
+  color: #8c3327;
+}
+
 @media (max-width: 900px) {
   .meal-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .meal-detail__content {
+    grid-template-columns: 1fr;
+  }
+
+  .meal-artwork--detail {
+    min-height: 18rem;
   }
 }
 
@@ -313,6 +532,11 @@ h1 {
 
   .section-heading {
     display: block;
+  }
+
+  .catalogue-tools,
+  .meal-detail__facts {
+    grid-template-columns: 1fr;
   }
 
   .meal-count {

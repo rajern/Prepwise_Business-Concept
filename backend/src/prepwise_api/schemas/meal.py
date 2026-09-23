@@ -21,3 +21,7 @@ class MealResponse(BaseModel):
     fat_grams: Decimal
     ingredients: list[str]
     allergens: list[AllergenResponse]
+
+
+class MealDetailResponse(MealResponse):
+    available: bool

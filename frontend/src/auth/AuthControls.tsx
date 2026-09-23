@@ -8,6 +8,7 @@ import { useIsAuthenticated, useMsal } from '@azure/msal-react'
 import { useEffect, useState } from 'react'
 
 import { acquireApiAccessToken, createLoginRequest } from './token'
+import { reportAuthError } from './diagnostics'
 
 interface AuthControlsProps {
   apiScope: string
@@ -56,7 +57,8 @@ function SignedOutControls({
 
   function signIn() {
     setInteractionError(false)
-    void instance.loginRedirect(createLoginRequest(apiScope)).catch(() => {
+    void instance.loginRedirect(createLoginRequest(apiScope)).catch((error) => {
+      reportAuthError('login redirect', error)
       setInteractionError(true)
     })
   }
@@ -132,7 +134,8 @@ function SignedInControls({
         ...createLoginRequest(apiScope),
         account,
       })
-      .catch(() => {
+      .catch((error) => {
+        reportAuthError('API access redirect', error)
         setInteractionError(true)
       })
   }
@@ -144,7 +147,8 @@ function SignedInControls({
         account,
         postLogoutRedirectUri: new URL('/', window.location.origin).toString(),
       })
-      .catch(() => {
+      .catch((error) => {
+        reportAuthError('logout redirect', error)
         setInteractionError(true)
       })
   }

@@ -24,6 +24,7 @@ vi.mock('./auth/config', () => ({
   loadAuthSettings: vi.fn(() => ({
     apiScope: 'api://prepwise/access_as_user',
     clientId: 'spa-client-id',
+    tenantId: '1a782388-bf90-4ea8-af8f-bcc755f5cd7e',
     tenantSubdomain: 'prepwisecustomers',
   })),
 }))

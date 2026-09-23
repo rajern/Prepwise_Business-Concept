@@ -151,11 +151,13 @@ jobs:
         working-directory: frontend
         env:
           VITE_API_BASE_URL: ${{ steps.backend.outputs.url }}
+          VITE_ENTRA_TENANT_ID: ${{ vars.ENTRA_EXTERNAL_TENANT_ID }}
           VITE_ENTRA_TENANT_SUBDOMAIN: ${{ vars.ENTRA_EXTERNAL_TENANT_SUBDOMAIN }}
           VITE_ENTRA_SPA_CLIENT_ID: ${{ vars.ENTRA_SPA_CLIENT_ID }}
           VITE_ENTRA_API_SCOPE: ${{ vars.ENTRA_API_SCOPE }}
         run: |
-          if [ -z "$VITE_ENTRA_TENANT_SUBDOMAIN" ] || \
+          if [ -z "$VITE_ENTRA_TENANT_ID" ] || \
+             [ -z "$VITE_ENTRA_TENANT_SUBDOMAIN" ] || \
              [ -z "$VITE_ENTRA_SPA_CLIENT_ID" ] || \
              [ -z "$VITE_ENTRA_API_SCOPE" ]; then
             echo "::error::One or more required Entra frontend variables are unavailable."
@@ -164,6 +166,7 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
           grep --recursive --fixed-strings "$VITE_API_BASE_URL" dist/assets > /dev/null
+          grep --recursive --fixed-strings "$VITE_ENTRA_TENANT_ID" dist/assets > /dev/null
           grep --recursive --fixed-strings "$VITE_ENTRA_TENANT_SUBDOMAIN" dist/assets > /dev/null
           grep --recursive --fixed-strings "$VITE_ENTRA_SPA_CLIENT_ID" dist/assets > /dev/null
           grep --recursive --fixed-strings "$VITE_ENTRA_API_SCOPE" dist/assets > /dev/null

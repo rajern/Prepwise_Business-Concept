@@ -7,6 +7,7 @@ import {
 import { useIsAuthenticated, useMsal } from '@azure/msal-react'
 import { useEffect, useState } from 'react'
 
+import { fetchCurrentUser } from '../api/me'
 import { acquireApiAccessToken, createLoginRequest } from './token'
 import { reportAuthError } from './diagnostics'
 
@@ -105,6 +106,7 @@ function SignedInControls({
     let cancelled = false
 
     void acquireApiAccessToken(instance, account, apiScope)
+      .then(fetchCurrentUser)
       .then(() => {
         if (!cancelled) {
           setTokenStatus('ready')

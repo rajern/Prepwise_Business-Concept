@@ -11,6 +11,10 @@ param logDailyQuotaGb string
 param keyVaultName string
 param keyVaultUri string
 param databaseSecretName string
+param entraTenantId string
+param entraTenantSubdomain string
+param entraApiClientId string
+param entraApiScope string
 param tags object
 
 var keyVaultSecretsUserRoleId = subscriptionResourceId(
@@ -139,6 +143,22 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
             {
               name: 'DATABASE_URL'
               secretRef: databaseSecretName
+            }
+            {
+              name: 'ENTRA_TENANT_ID'
+              value: entraTenantId
+            }
+            {
+              name: 'ENTRA_TENANT_SUBDOMAIN'
+              value: entraTenantSubdomain
+            }
+            {
+              name: 'ENTRA_API_CLIENT_ID'
+              value: entraApiClientId
+            }
+            {
+              name: 'ENTRA_API_SCOPE'
+              value: entraApiScope
             }
             {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'

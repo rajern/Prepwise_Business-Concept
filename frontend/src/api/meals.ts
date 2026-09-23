@@ -1,3 +1,5 @@
+import { apiUrl } from './config'
+
 export interface Allergen {
   code: string
   name: string
@@ -17,10 +19,8 @@ export interface Meal {
   allergens: Allergen[]
 }
 
-const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL ?? '').replace(/\/$/, '')
-
 export async function fetchMeals(signal?: AbortSignal): Promise<Meal[]> {
-  const response = await fetch(`${apiBaseUrl}/api/meals`, {
+  const response = await fetch(apiUrl('/api/meals'), {
     headers: { Accept: 'application/json' },
     signal,
   })

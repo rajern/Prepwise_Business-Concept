@@ -94,6 +94,8 @@ group; it does not deploy anything or read Key Vault secrets.
 `main`. It publishes commit-tagged and `latest` backend images to GHCR, applies Alembic migrations
 with `database-migration-url`, initialises demo data only when the database has no meals, deploys
 the backend and frontend, and verifies health, database connectivity, catalogue access and CORS.
+The deployment also supplies the public Entra tenant, API audience and delegated-scope values used
+by FastAPI to validate access tokens; no Entra secret is stored or injected.
 
 The workflow authenticates to Azure through OIDC. It reads the Static Web Apps deployment token
 at runtime through Azure and masks it; the token is not stored in GitHub. The GHCR package must be

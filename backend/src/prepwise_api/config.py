@@ -16,11 +16,28 @@ class Settings(BaseSettings):
     app_env: Literal["development", "test", "production"] = "development"
     database_url: str = "postgresql+psycopg://prepwise:change-me@localhost:5432/prepwise"
     cors_allowed_origins: str = "http://localhost:3000"
+    entra_tenant_id: str = "1a782388-bf90-4ea8-af8f-bcc755f5cd7e"
+    entra_tenant_subdomain: str = "prepwisecustomers"
+    entra_api_client_id: str = "82773ea0-fcf3-4874-81c3-3cd0da7d00c7"
+    entra_api_scope: str = "access_as_user"
 
     @property
     def cors_origins(self) -> list[str]:
         """Return the configured comma-separated browser origins."""
         return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
+
+    @property
+    def entra_issuer(self) -> str:
+        """Return the exact issuer published by this External ID tenant."""
+        return f"https://{self.entra_tenant_id}.ciamlogin.com/{self.entra_tenant_id}/v2.0"
+
+    @property
+    def entra_jwks_url(self) -> str:
+        """Return the tenant-specific signing-key endpoint used for key rotation."""
+        return (
+            f"https://{self.entra_tenant_subdomain}.ciamlogin.com/"
+            f"{self.entra_tenant_id}/discovery/v2.0/keys"
+        )
 
 
 @lru_cache

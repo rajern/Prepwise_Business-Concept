@@ -11,6 +11,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AuthControls } from './AuthControls'
 
+const fetchCurrentUser = vi.hoisted(() =>
+  vi.fn().mockResolvedValue({
+    id: 'local-user-id',
+    email: 'customer@example.com',
+    display_name: 'Prepwise Customer',
+    role: 'customer',
+  }),
+)
+
+vi.mock('../api/me', () => ({ fetchCurrentUser }))
+
 vi.mock('@azure/msal-react', () => ({
   useIsAuthenticated: vi.fn(),
   useMsal: vi.fn(),
@@ -32,6 +43,12 @@ const useMsalMock = vi.mocked(useMsal)
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  fetchCurrentUser.mockResolvedValue({
+    id: 'local-user-id',
+    email: 'customer@example.com',
+    display_name: 'Prepwise Customer',
+    role: 'customer',
+  })
 })
 
 function configureMsalContext(isAuthenticated: boolean) {
@@ -88,6 +105,7 @@ describe('AuthControls', () => {
       account,
       scopes: [apiScope],
     })
+    expect(fetchCurrentUser).toHaveBeenCalledWith('not-a-real-token')
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
 

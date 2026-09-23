@@ -254,6 +254,8 @@ On merge to `main`:
 
 ### T4.1 — Configure Entra External ID
 
+**Status:** Complete
+
 Implement customer signup and login.
 
 **Acceptance criteria:**
@@ -266,6 +268,8 @@ Implement customer signup and login.
 ---
 
 ### T4.2 — Protect the backend API
+
+**Status:** In progress — implementation complete; production token verification pending
 
 **Implement:**
 

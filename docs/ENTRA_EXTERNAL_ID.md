@@ -59,9 +59,24 @@ Both the tenant-name authority host and the tenant-ID issuer host are configured
 authorities. External ID discovery uses the name host, while its OpenID metadata identifies the
 issuer with the tenant-ID host.
 
-## Task boundary
+## Backend token validation
 
-T4.1 signs users in and obtains the delegated Prepwise API access token in the browser. T4.2 adds
-FastAPI JWT validation, protected endpoints and local-user resolution. Until T4.2 is implemented,
-the existing meal catalogue remains public and the access token is not treated as trusted by the
-backend.
+FastAPI validates only delegated access tokens intended for the API application. Validation checks
+the RS256 signature against the tenant-specific rotating JWKS, the exact issuer published by the
+tenant metadata, the API application ID as audience, expiry, token version, tenant ID and the
+`access_as_user` scope.
+
+The protected `GET /api/me` endpoint maps the immutable `tid` and `oid` claims to the local user.
+Email and display name claims are stored only as profile data and are never identity keys or
+authorization inputs. New local users receive the database default `customer` role. The existing
+`GET /api/meals` catalogue remains public.
+
+The backend configuration is public metadata rather than credentials:
+
+* `ENTRA_TENANT_ID=1a782388-bf90-4ea8-af8f-bcc755f5cd7e`
+* `ENTRA_TENANT_SUBDOMAIN=prepwisecustomers`
+* `ENTRA_API_CLIENT_ID=82773ea0-fcf3-4874-81c3-3cd0da7d00c7`
+* `ENTRA_API_SCOPE=access_as_user`
+
+Docker Compose supplies these values locally. Bicep and the production deployment workflow supply
+them to the Container App. No client secret is required by the API for access-token validation.

@@ -28,6 +28,18 @@ param backendContainerImage string
 @maxValue(65535)
 param backendContainerPort int
 
+@description('Microsoft Entra External ID tenant ID used to validate API access tokens.')
+param entraTenantId string
+
+@description('Microsoft Entra External ID tenant subdomain used to retrieve signing keys.')
+param entraTenantSubdomain string
+
+@description('Application ID of the Prepwise API registration; expected as the v2 token audience.')
+param entraApiClientId string
+
+@description('Delegated scope required by protected Prepwise API endpoints.')
+param entraApiScope string = 'access_as_user'
+
 @description('Maximum daily Log Analytics ingestion in GB, represented as a decimal string. Use -1 for no cap.')
 param logDailyQuotaGb string = '0.1'
 
@@ -85,6 +97,10 @@ module backend './modules/backend-hosting.bicep' = {
     keyVaultName: secrets.outputs.name
     keyVaultUri: secrets.outputs.uri
     databaseSecretName: databaseSecretName
+    entraTenantId: entraTenantId
+    entraTenantSubdomain: entraTenantSubdomain
+    entraApiClientId: entraApiClientId
+    entraApiScope: entraApiScope
     tags: commonTags
   }
 }

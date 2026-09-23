@@ -21,8 +21,9 @@ The production Static Web App uses `eastus2`. Azure currently rejects new-custom
 Apps deployments in `westeurope`; the remaining Azure resources stay in `norwayeast`.
 
 Container Apps uses consumption-based scaling from zero to one replica. The committed production
-parameters deploy a public placeholder image. T3.4 replaces it with a versioned Prepwise image
-from GitHub Container Registry.
+parameters use the public `ghcr.io/rajern/prepwise-api:latest` image on port `8000`. Production
+deployments select an immutable commit tag; `latest` remains the Bicep fallback for later
+infrastructure reconciliation.
 
 ## Prerequisites
 
@@ -86,6 +87,18 @@ The following values are created or configured outside Bicep:
 No Azure client secret or database credential belongs in GitHub. The manually triggered
 `Azure OIDC check` workflow only verifies OIDC login and read access to the configured resource
 group; it does not deploy anything or read Key Vault secrets.
+
+## Production delivery
+
+`.github/workflows/deploy-production.yml` runs the required CI checks before deploying a push to
+`main`. It publishes commit-tagged and `latest` backend images to GHCR, applies Alembic migrations
+with `database-migration-url`, initialises demo data only when the database has no meals, deploys
+the backend and frontend, and verifies health, database connectivity, catalogue access and CORS.
+
+The workflow authenticates to Azure through OIDC. It reads the Static Web Apps deployment token
+at runtime through Azure and masks it; the token is not stored in GitHub. The GHCR package must be
+public so Container Apps can pull it without a PAT or registry password. The workflow verifies
+anonymous image access before changing production.
 
 ## Configuration boundary
 

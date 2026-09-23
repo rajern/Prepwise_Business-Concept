@@ -190,6 +190,12 @@ Pull requests run the same backend and frontend checks in GitHub Actions and bui
 Docker image. The workflow has read-only repository permissions and does not use deployment
 credentials or production secrets.
 
+Pushes to `main` first reuse those CI checks and then deploy through the protected `production`
+environment. The deployment publishes the backend to GHCR, migrates Neon using the dedicated
+migration role, deploys Container Apps and Static Web Apps, and runs production smoke checks.
+Azure authentication uses OIDC; production database credentials are read from Key Vault only for
+the step that needs them.
+
 ## Status
 
 **Implementation in progress.**

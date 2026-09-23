@@ -10,7 +10,7 @@ from prepwise_api.models import (
     meal_allergens,
     meal_ingredients,
 )
-from prepwise_api.seed import SeedSummary, seed_database
+from prepwise_api.seed import SeedSummary, seed_database, seed_database_if_empty
 from prepwise_api.seed_data import ALLERGENS, INGREDIENT_NAMES, MEALS, PICKUP_LOCATIONS
 
 
@@ -58,4 +58,27 @@ def test_seed_preserves_ingredient_order() -> None:
         ).all()
 
     assert positions == list(range(len(MEALS[0].ingredients)))
+    engine.dispose()
+
+
+def test_seed_if_empty_does_not_replace_an_existing_catalogue() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine)
+
+    summary = seed_database_if_empty(engine)
+    assert summary is not None
+
+    with Session(engine) as session, session.begin():
+        first_meal = session.scalar(select(Meal).order_by(Meal.name).limit(1))
+        assert first_meal is not None
+        first_meal.available = False
+        first_meal_id = first_meal.id
+
+    assert seed_database_if_empty(engine) is None
+
+    with Session(engine) as session:
+        preserved_meal = session.get(Meal, first_meal_id)
+        assert preserved_meal is not None
+        assert preserved_meal.available is False
+
     engine.dispose()

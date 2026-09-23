@@ -122,6 +122,10 @@ Backend container images are published to GitHub Container Registry and pulled b
 
 Azure Container Registry is not used because its fixed cost is unnecessary for the expected traffic and GitHub Container Registry already fits the GitHub Actions delivery workflow.
 
+The production GHCR package is public so Container Apps can pull immutable commit-tagged images
+without storing a GitHub PAT or registry password in Azure. GitHub Actions publishes with its
+short-lived `GITHUB_TOKEN`.
+
 ### Bicep
 
 Azure infrastructure is defined as code with Bicep.

@@ -1,0 +1,211 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: production-deployment
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Required CI
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to production
+    needs: ci
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      AZURE_CONTAINER_APP: ca-prepwise-prod
+      KEY_VAULT_NAME: kv-prepwise-prod-f5knfy
+      AZURE_STATIC_WEB_APP: swa-prepwise-prod-f5knfy
+      BACKEND_IMAGE: ghcr.io/rajern/prepwise-api:${{ github.sha }}
+      BACKEND_IMAGE_LATEST: ghcr.io/rajern/prepwise-api:latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Sign in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --tag "$BACKEND_IMAGE" \
+            --tag "$BACKEND_IMAGE_LATEST" \
+            ./backend
+          docker push "$BACKEND_IMAGE"
+          docker push "$BACKEND_IMAGE_LATEST"
+
+      - name: Verify backend image is publicly pullable
+        run: |
+          docker logout ghcr.io
+          for attempt in {1..6}; do
+            echo "Checking anonymous GHCR access (attempt $attempt of 6)."
+            if docker manifest inspect "$BACKEND_IMAGE" > /dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::The GHCR package is not publicly pullable by Azure Container Apps."
+          exit 1
+
+      - name: Apply Neon migrations and initialise an empty catalogue
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          database_url="$(az keyvault secret show \
+            --vault-name "$KEY_VAULT_NAME" \
+            --name database-migration-url \
+            --query value \
+            --output tsv)"
+          if [ -z "$database_url" ]; then
+            echo "::error::database-migration-url is empty or unavailable."
+            exit 1
+          fi
+          echo "::add-mask::$database_url"
+          docker run --rm \
+            --env APP_ENV=production \
+            --env DATABASE_URL="$database_url" \
+            "$BACKEND_IMAGE" \
+            python -m alembic upgrade head
+          docker run --rm \
+            --env APP_ENV=production \
+            --env DATABASE_URL="$database_url" \
+            "$BACKEND_IMAGE" \
+            prepwise-seed-if-empty
+          unset database_url
+
+      - name: Deploy backend to Azure Container Apps
+        id: backend
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          az containerapp ingress update \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --target-port 8000 \
+            --output none
+          az containerapp update \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --image "$BACKEND_IMAGE" \
+            --output none
+          backend_fqdn="$(az containerapp show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)"
+          backend_url="https://$backend_fqdn"
+          echo "url=$backend_url" >> "$GITHUB_OUTPUT"
+
+      - name: Verify backend and Neon
+        env:
+          BACKEND_URL: ${{ steps.backend.outputs.url }}
+        run: |
+          curl --fail --silent --show-error \
+            --retry 18 --retry-delay 5 --retry-all-errors \
+            --output /dev/null "$BACKEND_URL/health"
+          curl --fail --silent --show-error \
+            --retry 6 --retry-delay 5 --retry-all-errors \
+            --output /dev/null "$BACKEND_URL/health/database"
+          curl --fail --silent --show-error \
+            --retry 6 --retry-delay 5 --retry-all-errors \
+            --output /dev/null "$BACKEND_URL/api/meals"
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v3
+        with:
+          version: 11.19.0
+          runtime: node@22
+          working-directory: frontend
+          cache: true
+          install: false
+
+      - name: Build frontend for the deployed API
+        working-directory: frontend
+        env:
+          VITE_API_BASE_URL: ${{ steps.backend.outputs.url }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          grep --recursive --fixed-strings "$VITE_API_BASE_URL" dist/assets > /dev/null
+
+      - name: Read Static Web Apps deployment token through OIDC
+        id: static-web-app-token
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+        run: |
+          deployment_token="$(az staticwebapp secrets list \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_STATIC_WEB_APP" \
+            --query properties.apiKey \
+            --output tsv)"
+          if [ -z "$deployment_token" ]; then
+            echo "::error::Static Web Apps deployment token is unavailable."
+            exit 1
+          fi
+          echo "::add-mask::$deployment_token"
+          echo "token=$deployment_token" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy frontend to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ steps.static-web-app-token.outputs.token }}
+          action: upload
+          app_location: frontend/dist
+          skip_app_build: true
+
+      - name: Verify frontend and browser API access
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          BACKEND_URL: ${{ steps.backend.outputs.url }}
+        run: |
+          frontend_hostname="$(az staticwebapp show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_STATIC_WEB_APP" \
+            --query defaultHostname \
+            --output tsv)"
+          frontend_url="https://$frontend_hostname"
+          curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            --output /dev/null "$frontend_url"
+          curl --fail --silent --show-error \
+            --dump-header "$RUNNER_TEMP/cors-headers" \
+            --output /dev/null \
+            --header "Origin: $frontend_url" \
+            "$BACKEND_URL/api/meals"
+          grep --fixed-strings --ignore-case \
+            "access-control-allow-origin: $frontend_url" \
+            "$RUNNER_TEMP/cors-headers" > /dev/null
+          {
+            echo "### Production deployment"
+            echo "- Frontend: $frontend_url"
+            echo "- Backend: $BACKEND_URL"
+            echo "- Image: $BACKEND_IMAGE"
+          } >> "$GITHUB_STEP_SUMMARY"

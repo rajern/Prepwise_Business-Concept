@@ -148,10 +148,34 @@ def seed_database(engine: Engine) -> SeedSummary:
     )
 
 
+def seed_database_if_empty(engine: Engine) -> SeedSummary | None:
+    """Seed an empty database once without overwriting an existing production catalogue."""
+    with Session(engine) as session:
+        if session.scalar(select(Meal.id).limit(1)) is not None:
+            return None
+
+    return seed_database(engine)
+
+
 def main() -> None:
     summary = seed_database(get_engine())
     print(
         "Seeded "
+        f"{summary.meals} meals, "
+        f"{summary.ingredients} ingredients, "
+        f"{summary.allergens} allergens and "
+        f"{summary.pickup_locations} pickup locations."
+    )
+
+
+def main_if_empty() -> None:
+    summary = seed_database_if_empty(get_engine())
+    if summary is None:
+        print("Skipped demo catalogue seed because meals already exist.")
+        return
+
+    print(
+        "Seeded initial demo catalogue with "
         f"{summary.meals} meals, "
         f"{summary.ingredients} ingredients, "
         f"{summary.allergens} allergens and "

@@ -26,3 +26,7 @@ Seed the development catalogue separately after applying migrations:
 ```powershell
 .venv\Scripts\python -m prepwise_api.seed
 ```
+
+The production deployment runs `prepwise-seed-if-empty` after migrations. It creates the initial
+portfolio demo catalogue only when no meals exist, so later administrative changes are not reset
+by subsequent deployments.

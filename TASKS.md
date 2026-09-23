@@ -185,6 +185,8 @@ Include:
 
 ### T3.2 — Configure production secrets and identity
 
+**Status:** Complete
+
 **Implement:**
 
 * Key Vault

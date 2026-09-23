@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from prepwise_api.config import Settings, get_settings
 from prepwise_api.database import get_session
-from prepwise_api.models import User
+from prepwise_api.models import User, UserRole
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,6 +178,18 @@ def get_current_user(
     else:
         session.refresh(user)
 
+    return user
+
+
+def require_admin(
+    user: Annotated[User, Depends(get_current_user)],
+) -> User:
+    """Require the authenticated local user to have the admin role."""
+    if user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
     return user
 
 

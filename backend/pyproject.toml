@@ -20,6 +20,7 @@ dependencies = [
 [project.scripts]
 prepwise-seed = "prepwise_api.seed:main"
 prepwise-seed-if-empty = "prepwise_api.seed:main_if_empty"
+prepwise-set-user-role = "prepwise_api.user_roles:main"
 
 [project.optional-dependencies]
 dev = [

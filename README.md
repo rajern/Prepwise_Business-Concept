@@ -162,7 +162,8 @@ frontend build and set the backend's `CORS_ALLOWED_ORIGINS` to the Static Web Ap
 The frontend uses browser-delegated Microsoft Entra External ID for customer sign-up, sign-in and
 sign-out. FastAPI validates delegated API tokens and maps the immutable Entra identity to a local
 user when the frontend calls the protected `GET /api/me` endpoint. The meal catalogue remains
-public. Configuration and trust boundaries are documented in
+public. Customer/admin roles are stored locally and enforced by backend dependencies; no public
+role-assignment endpoint exists. Configuration and trust boundaries are documented in
 [`docs/ENTRA_EXTERNAL_ID.md`](./docs/ENTRA_EXTERNAL_ID.md).
 
 Stop the containers without deleting PostgreSQL data:

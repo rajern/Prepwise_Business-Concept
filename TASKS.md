@@ -269,7 +269,7 @@ Implement customer signup and login.
 
 ### T4.2 — Protect the backend API
 
-**Status:** In progress — implementation complete; production token verification pending
+**Status:** Complete
 
 **Implement:**
 
@@ -286,6 +286,8 @@ Implement customer signup and login.
 ---
 
 ### T4.3 — Implement customer/admin authorization
+
+**Status:** In progress — implementation underway
 
 **Acceptance criteria:**
 

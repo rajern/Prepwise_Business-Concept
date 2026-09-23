@@ -7,7 +7,7 @@ import {
 import { useIsAuthenticated, useMsal } from '@azure/msal-react'
 import { useEffect, useState } from 'react'
 
-import { fetchCurrentUser } from '../api/me'
+import { fetchCurrentUser, type CurrentUser } from '../api/me'
 import { acquireApiAccessToken, createLoginRequest } from './token'
 import { reportAuthError } from './diagnostics'
 
@@ -96,6 +96,7 @@ function SignedInControls({
   interactionInProgress,
 }: SignedInControlsProps) {
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>('loading')
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [interactionError, setInteractionError] = useState(false)
 
   useEffect(() => {
@@ -107,8 +108,9 @@ function SignedInControls({
 
     void acquireApiAccessToken(instance, account, apiScope)
       .then(fetchCurrentUser)
-      .then(() => {
+      .then((user) => {
         if (!cancelled) {
+          setCurrentUser(user)
           setTokenStatus('ready')
         }
       })
@@ -161,7 +163,8 @@ function SignedInControls({
         <p className="auth-account">{account.name ?? account.username}</p>
         <p className="auth-status" aria-live="polite">
           {tokenStatus === 'loading' && 'Preparing secure API access…'}
-          {tokenStatus === 'ready' && 'Signed in · API access ready'}
+          {tokenStatus === 'ready' &&
+            `Signed in · API access ready · ${currentUser?.role}`}
           {tokenStatus === 'interaction-required' &&
             'Additional confirmation is required for API access.'}
           {tokenStatus === 'error' &&

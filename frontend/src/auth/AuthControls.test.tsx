@@ -99,7 +99,7 @@ describe('AuthControls', () => {
     render(<AuthControls apiScope={apiScope} />)
 
     expect(
-      await screen.findByText('Signed in · API access ready'),
+      await screen.findByText('Signed in · API access ready · customer'),
     ).toBeInTheDocument()
     expect(acquireTokenSilent).toHaveBeenCalledWith({
       account,

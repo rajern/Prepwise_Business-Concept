@@ -13,7 +13,7 @@ from prepwise_api.auth import (
 )
 from prepwise_api.database import get_session
 from prepwise_api.main import app
-from prepwise_api.models import Base, User
+from prepwise_api.models import Base, User, UserRole
 
 
 class StubAccessTokenValidator:
@@ -99,3 +99,33 @@ def test_authenticated_request_creates_and_reuses_local_customer(
         user = session.scalar(select(User))
         assert user is not None
         assert user.external_subject.endswith(":d074c8a4-4494-4597-9d33-2df93b5f9959")
+
+
+def test_customer_cannot_call_admin_endpoint(
+    client_and_engine: tuple[TestClient, object],
+) -> None:
+    client, _ = client_and_engine
+    headers = {"Authorization": "Bearer valid-token"}
+
+    response = client.get("/api/admin/access", headers=headers)
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Admin access required"}
+
+
+def test_explicitly_assigned_admin_can_call_admin_endpoint(
+    client_and_engine: tuple[TestClient, object],
+) -> None:
+    client, engine = client_and_engine
+    headers = {"Authorization": "Bearer valid-token"}
+    assert client.get("/api/me", headers=headers).status_code == 200
+
+    with Session(engine) as session, session.begin():  # type: ignore[arg-type]
+        user = session.scalar(select(User))
+        assert user is not None
+        user.role = UserRole.ADMIN
+
+    response = client.get("/api/admin/access", headers=headers)
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "role": "admin"}

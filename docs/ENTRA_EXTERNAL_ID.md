@@ -80,3 +80,20 @@ The backend configuration is public metadata rather than credentials:
 
 Docker Compose supplies these values locally. Bicep and the production deployment workflow supply
 them to the Container App. No client secret is required by the API for access-token validation.
+
+## Local roles and admin bootstrap
+
+Every local user is created with the `customer` role. Admin authorization is enforced by the
+backend through a reusable role dependency; a customer receives `403 Forbidden` from admin
+endpoints even if the frontend is modified.
+
+There is deliberately no public API for granting admin access. An operator with database access
+can explicitly change one existing local user with:
+
+```powershell
+prepwise-set-user-role --email "customer@example.com" --role admin
+```
+
+The command requires an exact email match and updates only the application role. It can also set
+the role back to `customer`. The first production admin should be assigned only after that user has
+signed in once and therefore has a local user record.

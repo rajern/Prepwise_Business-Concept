@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from prepwise_api.api import meals_router, users_router
+from prepwise_api.api import admin_router, meals_router, users_router
 from prepwise_api.config import get_settings
 from prepwise_api.database import check_database_connection
 
@@ -21,6 +21,7 @@ app.add_middleware(
 )
 app.include_router(meals_router)
 app.include_router(users_router)
+app.include_router(admin_router)
 
 
 @app.get("/health", tags=["health"])

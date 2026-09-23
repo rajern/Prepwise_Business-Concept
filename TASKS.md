@@ -229,6 +229,8 @@ For pull requests run:
 
 ### T3.4 — Create initial deployment pipeline
 
+**Status:** Complete
+
 On merge to `main`:
 
 * run required CI checks

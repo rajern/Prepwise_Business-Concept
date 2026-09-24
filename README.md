@@ -182,8 +182,14 @@ Run the frontend checks from `frontend/`:
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:e2e
 pnpm build
 ```
+
+The Playwright suite runs against the real frontend, FastAPI backend and PostgreSQL database.
+CI starts and seeds the isolated stack, provisions deterministic customer/admin test identities,
+and runs the browser flows without external Entra credentials. The test identity adapter is
+fail-closed and can only be enabled when the backend runs with `APP_ENV=test`.
 
 Run the backend checks from `backend/`:
 
@@ -194,13 +200,15 @@ Run the backend checks from `backend/`:
 .venv\Scripts\python -m pytest
 ```
 
-Pull requests run the same backend and frontend checks in GitHub Actions and build the backend
-Docker image. The workflow has read-only repository permissions and does not use deployment
-credentials or production secrets.
+Pull requests run the same backend and frontend checks in GitHub Actions, build the backend
+Docker image and run the critical Playwright flows. The workflow has read-only repository
+permissions and does not use deployment credentials or production secrets.
 
 Pushes to `main` first reuse those CI checks and then deploy through the protected `production`
 environment. The deployment publishes the backend to GHCR, migrates Neon using the dedicated
-migration role, deploys Container Apps and Static Web Apps, and runs production smoke checks.
+migration role, deploys Container Apps and Static Web Apps, and runs production smoke checks for
+the frontend, API, database-backed readiness, public catalogue/detail endpoints and browser CORS.
+Any failed smoke check fails the deployment workflow.
 Azure authentication uses OIDC; production database credentials are read from Key Vault only for
 the step that needs them.
 

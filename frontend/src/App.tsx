@@ -51,12 +51,14 @@ interface AppProps {
   apiScope: string
   initialAccessToken?: string | null
   initialCurrentUser?: CurrentUser | null
+  isE2ESession?: boolean
 }
 
 export function App({
   apiScope,
   initialAccessToken = null,
   initialCurrentUser = null,
+  isE2ESession = false,
 }: AppProps) {
   const isAdminRoute = window.location.pathname.startsWith('/admin')
   const [meals, setMeals] = useState<Meal[] | null>(null)
@@ -354,11 +356,20 @@ export function App({
             {currentUser?.role === 'admin' && <a href="/admin">Admin</a>}
           </nav>
         </div>
-        <AuthControls
-          apiScope={apiScope}
-          onAccessTokenChange={handleAccessTokenChange}
-          onCurrentUserChange={setCurrentUser}
-        />
+        {isE2ESession && currentUser ? (
+          <div className="auth-controls auth-controls--signed-in">
+            <div>
+              <p className="auth-account">{currentUser.display_name}</p>
+              <p className="auth-status">Signed in · test session · {currentUser.role}</p>
+            </div>
+          </div>
+        ) : (
+          <AuthControls
+            apiScope={apiScope}
+            onAccessTokenChange={handleAccessTokenChange}
+            onCurrentUserChange={setCurrentUser}
+          />
+        )}
       </header>
       {isAdminRoute ? (
         <AdminRoute accessToken={accessToken} currentUser={currentUser} />

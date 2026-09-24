@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     otel_service_name: str = "prepwise-api"
     database_url: str = "postgresql+psycopg://prepwise:change-me@localhost:5432/prepwise"
     cors_allowed_origins: str = "http://localhost:3000"
+    e2e_auth_enabled: bool = False
     entra_tenant_id: str = "1a782388-bf90-4ea8-af8f-bcc755f5cd7e"
     entra_tenant_subdomain: str = "prepwisecustomers"
     entra_api_client_id: str = "82773ea0-fcf3-4874-81c3-3cd0da7d00c7"

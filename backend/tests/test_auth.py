@@ -6,7 +6,12 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from prepwise_api.auth import AccessTokenValidator, InvalidAccessTokenError
+from prepwise_api.auth import (
+    AccessTokenValidator,
+    E2EAccessTokenValidator,
+    InvalidAccessTokenError,
+    create_access_token_validator,
+)
 from prepwise_api.config import Settings
 
 TENANT_ID = "1a782388-bf90-4ea8-af8f-bcc755f5cd7e"
@@ -96,3 +101,15 @@ def test_external_id_endpoints_match_published_tenant_metadata() -> None:
         "https://prepwisecustomers.ciamlogin.com/"
         "1a782388-bf90-4ea8-af8f-bcc755f5cd7e/discovery/v2.0/keys"
     )
+
+
+def test_e2e_authentication_is_available_only_in_test_environment() -> None:
+    validator = create_access_token_validator(Settings(app_env="test", e2e_auth_enabled=True))
+
+    assert isinstance(validator, E2EAccessTokenValidator)
+    assert validator.validate("prepwise-e2e-admin").email == "admin.e2e@example.invalid"
+    with pytest.raises(InvalidAccessTokenError):
+        validator.validate("unknown-token")
+
+    with pytest.raises(RuntimeError, match="only be enabled in the test environment"):
+        create_access_token_validator(Settings(app_env="production", e2e_auth_enabled=True))

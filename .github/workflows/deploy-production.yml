@@ -258,7 +258,7 @@ jobs:
           app_location: frontend/dist
           skip_app_build: true
 
-      - name: Verify frontend and browser API access
+      - name: Run production smoke tests
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           BACKEND_URL: ${{ steps.backend.outputs.url }}
@@ -269,17 +269,7 @@ jobs:
             --query defaultHostname \
             --output tsv)"
           frontend_url="https://$frontend_hostname"
-          curl --fail --silent --show-error \
-            --retry 12 --retry-delay 5 --retry-all-errors \
-            --output /dev/null "$frontend_url"
-          curl --fail --silent --show-error \
-            --dump-header "$RUNNER_TEMP/cors-headers" \
-            --output /dev/null \
-            --header "Origin: $frontend_url" \
-            "$BACKEND_URL/api/meals"
-          grep --fixed-strings --ignore-case \
-            "access-control-allow-origin: $frontend_url" \
-            "$RUNNER_TEMP/cors-headers" > /dev/null
+          bash scripts/smoke-production.sh "$frontend_url" "$BACKEND_URL"
           {
             echo "### Production deployment"
             echo "- Frontend: $frontend_url"

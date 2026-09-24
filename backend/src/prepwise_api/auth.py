@@ -108,6 +108,37 @@ class AccessTokenValidator:
         )
 
 
+class TokenValidator(Protocol):
+    def validate(self, token: str) -> AccessTokenClaims: ...
+
+
+class E2EAccessTokenValidator:
+    """Resolve fixed local identities for full-stack tests only."""
+
+    _claims_by_token = {
+        "prepwise-e2e-customer": AccessTokenClaims(
+            tenant_id="e2e",
+            object_id="customer",
+            subject="customer",
+            email="customer.e2e@example.invalid",
+            display_name="E2E Customer",
+        ),
+        "prepwise-e2e-admin": AccessTokenClaims(
+            tenant_id="e2e",
+            object_id="admin",
+            subject="admin",
+            email="admin.e2e@example.invalid",
+            display_name="E2E Admin",
+        ),
+    }
+
+    def validate(self, token: str) -> AccessTokenClaims:
+        try:
+            return self._claims_by_token[token]
+        except KeyError as error:
+            raise InvalidAccessTokenError from error
+
+
 def _required_string_claim(payload: dict[str, Any], name: str) -> str:
     value = payload.get(name)
     if not isinstance(value, str) or not value:
@@ -123,9 +154,17 @@ def _optional_string_claim(payload: dict[str, Any], *names: str) -> str | None:
     return None
 
 
+def create_access_token_validator(settings: Settings) -> TokenValidator:
+    if settings.e2e_auth_enabled:
+        if settings.app_env != "test":
+            raise RuntimeError("E2E authentication may only be enabled in the test environment")
+        return E2EAccessTokenValidator()
+    return AccessTokenValidator(settings)
+
+
 @lru_cache
-def get_access_token_validator() -> AccessTokenValidator:
-    return AccessTokenValidator(get_settings())
+def get_access_token_validator() -> TokenValidator:
+    return create_access_token_validator(get_settings())
 
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -133,7 +172,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 def get_access_token_claims(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
-    validator: Annotated[AccessTokenValidator, Depends(get_access_token_validator)],
+    validator: Annotated[TokenValidator, Depends(get_access_token_validator)],
 ) -> AccessTokenClaims:
     """Require and validate a bearer token without exposing validation details."""
     if credentials is None or credentials.scheme.lower() != "bearer":

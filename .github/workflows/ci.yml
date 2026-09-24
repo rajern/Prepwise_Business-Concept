@@ -106,3 +106,69 @@ jobs:
 
       - name: Validate Bicep
         run: az bicep build --file infra/main.bicep --stdout > /dev/null
+
+  end-to-end:
+    name: Critical E2E flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APP_ENV: test
+      E2E_AUTH_ENABLED: "true"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Start PostgreSQL
+        run: docker compose up --detach db
+
+      - name: Build, migrate and seed the test backend
+        run: |
+          docker compose build backend
+          docker compose run --rm backend python -m alembic upgrade head
+          docker compose run --rm backend prepwise-seed
+          docker compose up --detach backend
+          curl --fail --silent --show-error \
+            --retry 12 --retry-delay 5 --retry-all-errors \
+            http://localhost:8000/health/ready > /dev/null
+
+      - name: Provision deterministic admin identity
+        run: |
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer prepwise-e2e-admin" \
+            http://localhost:8000/api/me > /dev/null
+          docker compose exec --no-TTY backend \
+            prepwise-set-user-role \
+            --email admin.e2e@example.invalid \
+            --role admin
+
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v3
+        with:
+          version: 11.19.0
+          runtime: node@22
+          working-directory: frontend
+          cache: true
+          install: false
+
+      - name: Install frontend dependencies and Chromium
+        working-directory: frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium
+
+      - name: Run critical browser flows
+        working-directory: frontend
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 14
+
+      - name: Show service logs on failure
+        if: ${{ failure() }}
+        run: docker compose logs --no-color backend db

@@ -17,6 +17,8 @@ venv/
 node_modules/
 dist/
 coverage/
+playwright-report/
+test-results/
 *.tsbuildinfo
 
 # Editors and operating systems
@@ -24,4 +26,3 @@ coverage/
 .vscode/
 .DS_Store
 Thumbs.db
-

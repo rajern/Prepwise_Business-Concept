@@ -550,7 +550,7 @@ Ensure consistent handling of:
 
 ### T7.4 — OpenTelemetry and Application Insights
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete
 
 Instrument the backend.
 
@@ -567,7 +567,7 @@ Instrument the backend.
 
 ### T7.5 — Production monitoring
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete
 
 Configure monitoring for at least:
 
@@ -588,6 +588,8 @@ Create at least one meaningful Azure alert.
 
 ### T8.1 — Add critical Playwright E2E flows
 
+**Status:** In progress — implemented and awaiting CI verification
+
 Cover a small number of high-value flows:
 
 * browse meal → add to cart
@@ -603,6 +605,8 @@ Cover a small number of high-value flows:
 ---
 
 ### T8.2 — Production smoke tests
+
+**Status:** In progress — implemented and awaiting production verification
 
 After deployment verify at least:
 

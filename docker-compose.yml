@@ -6,6 +6,7 @@ services:
     environment:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      E2E_AUTH_ENABLED: ${E2E_AUTH_ENABLED:-false}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-prepwise}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-prepwise}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-1a782388-bf90-4ea8-af8f-bcc755f5cd7e}
       ENTRA_TENANT_SUBDOMAIN: ${ENTRA_TENANT_SUBDOMAIN:-prepwisecustomers}

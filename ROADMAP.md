@@ -8,6 +8,8 @@ The goal is to get a small production system live early, then extend it incremen
 
 ## Milestone 1 — Production application
 
+**Status: Complete — production verified 2026-09-24.**
+
 Milestone 1 is complete when the full non-AI product is implemented, tested, deployed and documented.
 
 It includes:

@@ -27,7 +27,7 @@ tokens, connection strings or raw production logs.
 | Browser boundary | Production CORS grants only the deployed frontend origin. A disallowed-origin probe receives no access-control grant. | Pass |
 | Transport security | Container Apps has `allowInsecure=false`; production URLs and smoke checks require HTTPS with TLS 1.2 or newer. Neon connections force `sslmode=require`. | Pass |
 | Secret storage | `DATABASE_URL` is a Key Vault secret reference. The user-assigned runtime identity has `Key Vault Secrets User` only on the `database-url` secret. The migration credential is not attached to the application. | Pass |
-| Frontend hardening | Static Web Apps sets CSP, HSTS, anti-framing, MIME-sniffing, referrer and permissions headers; deployment smoke verifies the critical headers. | Pending production deployment |
+| Frontend hardening | Static Web Apps sets CSP, HSTS, anti-framing, MIME-sniffing, referrer and permissions headers; deployment smoke verifies the critical headers. | Pass |
 | Safe logging | Application code omits headers and query values and tests cover token/database-error redaction. An aggregate scan of 1,176 production log records found zero configured sensitive patterns. | Pass |
 | Operations | Health probes, Application Insights traces/dependencies, three-region availability testing and enabled availability/error/latency alerts were verified. | Pass |
 
@@ -37,12 +37,9 @@ network complexity and is not required for this low-cost portfolio deployment.
 
 ## Final authenticated production pass
 
-Customer and admin features were manually verified in production as T5 and T6 were completed, and
-the combined journeys now pass in Playwright CI. After the security-header deployment, perform one
-short live sign-in check to ensure the CSP permits the External ID flow:
+The security-header deployment and its production smoke test passed in GitHub Actions run
+`35981251676`. The application owner then confirmed in production that External ID sign-in works,
+the meal catalogue, cart and order history load, and **Admin → Orders** can inspect an order.
 
-1. Sign in and confirm the meal catalogue, cart and order history load without an error.
-2. Open **Admin**, select **Orders**, inspect one order and confirm the admin data loads.
-
-No data mutation is required for this final CSP regression check. Record the confirmation in
-`TASKS.md`, then mark T8.3, T8.4 and Milestone 1 complete.
+Together with the earlier live customer/admin journey checks and the current Playwright suite,
+this closes T8.3, T8.4 and Milestone 1.

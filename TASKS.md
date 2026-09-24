@@ -18,6 +18,8 @@ For each task:
 
 # Milestone 1 — Production application
 
+**Status:** Complete — production verified 2026-09-24
+
 ## 1. Repository foundation
 
 ### T1.1 — Initialise frontend and backend
@@ -625,7 +627,7 @@ After deployment verify at least:
 
 ### T8.3 — Security and configuration review
 
-**Status:** In progress — review complete; security headers awaiting production verification
+**Status:** Complete
 
 Verify:
 
@@ -641,7 +643,7 @@ Verify:
 
 ### T8.4 — Milestone 1 final QA
 
-**Status:** In progress — automated verification complete; final authenticated production pass pending
+**Status:** Complete — production verified
 
 Verify the complete customer journey:
 

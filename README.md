@@ -52,6 +52,8 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the technical architecture and [`
 
 ## Milestone 1 — Production application
 
+**Status: Complete and production verified.**
+
 The first milestone is a complete non-AI application with:
 
 * customer and admin interfaces
@@ -214,8 +216,8 @@ the step that needs them.
 
 ## Status
 
-**Implementation in progress.**
+**Milestone 1 complete. Milestone 2 not started.**
 
-The runnable foundation, relational model, migrations, development catalogue and first
-frontend-to-database vertical slice are complete. Development continues with the early Azure
-deployment tasks in `TASKS.md`.
+The complete non-AI product is implemented, tested and running in production. Customer and admin
+journeys, security controls, CI/CD, observability, alerting and production smoke tests have been
+verified. The next development phase is the AI application layer defined in `TASKS.md`.

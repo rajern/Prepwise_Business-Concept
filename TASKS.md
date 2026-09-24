@@ -418,7 +418,7 @@ The backend must:
 
 ### T6.1 — Admin shell
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete — production verified
 
 Create protected `/admin` routes and simple navigation.
 
@@ -432,7 +432,7 @@ Create protected `/admin` routes and simple navigation.
 
 ### T6.2 — Meal administration
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete — production verified
 
 Allow admin to:
 
@@ -451,6 +451,8 @@ Allow admin to:
 
 ### T6.3 — Pickup location administration
 
+**Status:** In progress — implemented and awaiting production verification
+
 Allow admin to:
 
 * create/edit pickup locations
@@ -463,6 +465,8 @@ Allow admin to:
 ---
 
 ### T6.4 — Order administration
+
+**Status:** In progress — implemented and awaiting production verification
 
 Allow admin to:
 

@@ -9,10 +9,14 @@ import {
   updateAdminMeal,
 } from '../api/adminMeals'
 import type { Allergen, MealDetail } from '../api/meals'
+import { OrdersPanel } from './OrdersPanel'
+import { PickupLocationsPanel } from './PickupLocationsPanel'
 
 interface AdminPageProps {
   accessToken: string
 }
+
+type AdminSection = 'meals' | 'pickup-locations' | 'orders'
 
 interface MealFormState {
   name: string
@@ -43,6 +47,62 @@ const emptyForm: MealFormState = {
 }
 
 export function AdminPage({ accessToken }: AdminPageProps) {
+  const [section, setSection] = useState<AdminSection>('meals')
+
+  return (
+    <section className="admin-page" aria-labelledby="admin-heading">
+      <div className="admin-shell-heading">
+        <p className="eyebrow">Protected workspace</p>
+        <h1 id="admin-heading">Admin</h1>
+        <p>Manage the catalogue, pickup network and order fulfilment.</p>
+      </div>
+      <nav className="admin-tabs" aria-label="Admin sections">
+        <AdminTab
+          active={section === 'meals'}
+          label="Meals"
+          onClick={() => setSection('meals')}
+        />
+        <AdminTab
+          active={section === 'pickup-locations'}
+          label="Pickup locations"
+          onClick={() => setSection('pickup-locations')}
+        />
+        <AdminTab
+          active={section === 'orders'}
+          label="Orders"
+          onClick={() => setSection('orders')}
+        />
+      </nav>
+      {section === 'meals' && <MealAdministration accessToken={accessToken} />}
+      {section === 'pickup-locations' && (
+        <PickupLocationsPanel accessToken={accessToken} />
+      )}
+      {section === 'orders' && <OrdersPanel accessToken={accessToken} />}
+    </section>
+  )
+}
+
+function AdminTab({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={active ? 'page' : undefined}
+      onClick={onClick}
+    >
+      {label}
+    </button>
+  )
+}
+
+function MealAdministration({ accessToken }: AdminPageProps) {
   const [meals, setMeals] = useState<MealDetail[] | null>(null)
   const [allergens, setAllergens] = useState<Allergen[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -155,11 +215,11 @@ export function AdminPage({ accessToken }: AdminPageProps) {
   }
 
   return (
-    <section className="admin-page" aria-labelledby="admin-heading">
+    <section className="admin-section" aria-labelledby="meal-admin-heading">
       <div className="admin-heading">
         <div>
-          <p className="eyebrow">Protected workspace</p>
-          <h1 id="admin-heading">Meal administration</h1>
+          <p className="eyebrow">Catalogue</p>
+          <h2 id="meal-admin-heading">Meal administration</h2>
           <p>
             Create meals, update product information and control customer
             availability.

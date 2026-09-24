@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from prepwise_api.api import (
     admin_meals_router,
+    admin_orders_router,
+    admin_pickup_locations_router,
     admin_router,
     cart_router,
     meals_router,
@@ -34,6 +36,8 @@ app.include_router(orders_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(admin_meals_router)
+app.include_router(admin_pickup_locations_router)
+app.include_router(admin_orders_router)
 
 
 @app.get("/health", tags=["health"])

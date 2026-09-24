@@ -34,3 +34,18 @@ class OrderItemResponse(BaseModel):
 
 class OrderDetailResponse(OrderSummaryResponse):
     items: list[OrderItemResponse]
+
+
+class AdminOrderSummaryResponse(OrderSummaryResponse):
+    customer_email: str | None
+    customer_display_name: str | None
+
+
+class AdminOrderDetailResponse(AdminOrderSummaryResponse):
+    items: list[OrderItemResponse]
+
+
+class OrderStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: OrderStatus

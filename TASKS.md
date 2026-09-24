@@ -588,7 +588,7 @@ Create at least one meaningful Azure alert.
 
 ### T8.1 — Add critical Playwright E2E flows
 
-**Status:** In progress — implemented and awaiting CI verification
+**Status:** Complete
 
 Cover a small number of high-value flows:
 
@@ -606,7 +606,7 @@ Cover a small number of high-value flows:
 
 ### T8.2 — Production smoke tests
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete
 
 After deployment verify at least:
 
@@ -625,6 +625,8 @@ After deployment verify at least:
 
 ### T8.3 — Security and configuration review
 
+**Status:** In progress — review complete; security headers awaiting production verification
+
 Verify:
 
 * no committed secrets
@@ -638,6 +640,8 @@ Verify:
 ---
 
 ### T8.4 — Milestone 1 final QA
+
+**Status:** In progress — automated verification complete; final authenticated production pass pending
 
 Verify the complete customer journey:
 

@@ -1,0 +1,19 @@
+title = "Prepwise secret scanning"
+minVersion = "v8.25.0"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Microsoft Entra application IDs are public identifiers, not credentials."
+regexes = [
+  '''82773ea0-fcf3-4874-81c3-3cd0da7d00c7''',
+]
+
+[[allowlists]]
+description = "Deterministic local-only tokens used by automated tests."
+regexes = [
+  '''prepwise-e2e-(?:admin|customer)''',
+  '''(?:valid|other)-token''',
+  '''52a8cd26-8b95-447b-aa0f-80efeb1aa218''',
+]

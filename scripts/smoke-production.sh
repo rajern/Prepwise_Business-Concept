@@ -3,14 +3,45 @@ set -euo pipefail
 
 frontend_url="${1:?Usage: smoke-production.sh FRONTEND_URL BACKEND_URL}"
 backend_url="${2:?Usage: smoke-production.sh FRONTEND_URL BACKEND_URL}"
+[[ "$frontend_url" == https://* ]] || { echo "Frontend URL must use HTTPS" >&2; exit 1; }
+[[ "$backend_url" == https://* ]] || { echo "Backend URL must use HTTPS" >&2; exit 1; }
 temporary_directory="$(mktemp -d)"
 trap 'rm -rf "$temporary_directory"' EXIT
 
-curl_retry=(--fail --silent --show-error --retry 12 --retry-delay 5 --retry-all-errors)
+curl_retry=(
+  --fail
+  --silent
+  --show-error
+  --retry 12
+  --retry-delay 5
+  --retry-all-errors
+  --proto '=https'
+  --tlsv1.2
+)
 
 echo "Checking frontend availability"
-curl "${curl_retry[@]}" "$frontend_url" --output "$temporary_directory/frontend.html"
+curl "${curl_retry[@]}" \
+  --dump-header "$temporary_directory/frontend-headers" \
+  "$frontend_url" \
+  --output "$temporary_directory/frontend.html"
 grep --fixed-strings '<title>Prepwise</title>' "$temporary_directory/frontend.html" >/dev/null
+
+echo "Checking frontend security headers"
+grep --fixed-strings --ignore-case \
+  "content-security-policy: default-src 'self'" \
+  "$temporary_directory/frontend-headers" >/dev/null
+grep --fixed-strings --ignore-case \
+  'strict-transport-security: max-age=31536000; includeSubDomains' \
+  "$temporary_directory/frontend-headers" >/dev/null
+grep --fixed-strings --ignore-case \
+  'x-content-type-options: nosniff' \
+  "$temporary_directory/frontend-headers" >/dev/null
+grep --fixed-strings --ignore-case \
+  'x-frame-options: DENY' \
+  "$temporary_directory/frontend-headers" >/dev/null
+grep --fixed-strings --ignore-case \
+  'referrer-policy: strict-origin-when-cross-origin' \
+  "$temporary_directory/frontend-headers" >/dev/null
 
 echo "Checking backend liveness"
 curl "${curl_retry[@]}" "$backend_url/health/live" |

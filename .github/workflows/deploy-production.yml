@@ -121,6 +121,7 @@ jobs:
             --image "$BACKEND_IMAGE" \
             --set-env-vars \
               "LOG_LEVEL=INFO" \
+              "OTEL_SERVICE_NAME=prepwise-api" \
               "ENTRA_TENANT_ID=$ENTRA_TENANT_ID" \
               "ENTRA_TENANT_SUBDOMAIN=$ENTRA_TENANT_SUBDOMAIN" \
               "ENTRA_API_CLIENT_ID=$ENTRA_API_CLIENT_ID" \

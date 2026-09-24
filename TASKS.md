@@ -529,7 +529,7 @@ Implement:
 
 ### T7.3 — Error handling and validation
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete
 
 Ensure consistent handling of:
 
@@ -550,6 +550,8 @@ Ensure consistent handling of:
 
 ### T7.4 — OpenTelemetry and Application Insights
 
+**Status:** In progress — implemented and awaiting production verification
+
 Instrument the backend.
 
 **Acceptance criteria:**
@@ -564,6 +566,8 @@ Instrument the backend.
 ---
 
 ### T7.5 — Production monitoring
+
+**Status:** In progress — implemented and awaiting production verification
 
 Configure monitoring for at least:
 

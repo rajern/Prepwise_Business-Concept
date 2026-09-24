@@ -16,6 +16,8 @@ The production parameter file creates:
 * one secret-scoped Key Vault role assignment for the runtime identity
 * one Log Analytics workspace with a low daily ingestion cap
 * one workspace-based Application Insights resource
+* one three-region availability test for backend readiness
+* one Azure Monitor Action Group and alerts for availability, HTTP 5xx responses and latency
 
 The production Static Web App uses `eastus2`. Azure currently rejects new-customer Static Web
 Apps deployments in `westeurope`; the remaining Azure resources stay in `norwayeast`.
@@ -62,16 +64,22 @@ az deployment sub what-if `
   --name prepwise-prod `
   --location norwayeast `
   --template-file infra/main.bicep `
-  --parameters infra/environments/prod.bicepparam
+  --parameters infra/environments/prod.bicepparam `
+  --parameters alertEmailAddress="<operator-email>"
 az deployment sub create `
   --name prepwise-prod `
   --location norwayeast `
   --template-file infra/main.bicep `
-  --parameters infra/environments/prod.bicepparam
+  --parameters infra/environments/prod.bicepparam `
+  --parameters alertEmailAddress="<operator-email>"
 ```
 
 The template outputs the frontend URL, backend URL, Key Vault URI, runtime managed identity name
 and principal ID, and the main resource names. It never outputs a secret value.
+
+The operator email is supplied at deployment time and is not committed to the repository. Leaving
+it empty still creates the availability test and alert rules, but no email notifications are sent.
+See [`../docs/OBSERVABILITY.md`](../docs/OBSERVABILITY.md) for telemetry, metrics and alert details.
 
 ## Existing production prerequisites
 

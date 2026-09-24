@@ -43,6 +43,9 @@ param entraApiScope string = 'access_as_user'
 @description('Maximum daily Log Analytics ingestion in GB, represented as a decimal string. Use -1 for no cap.')
 param logDailyQuotaGb string = '0.1'
 
+@description('Operator email for Azure Monitor alerts. Leave empty to create monitoring without email delivery.')
+param alertEmailAddress string = ''
+
 @description('Name of the existing Key Vault secret containing the production runtime database URL.')
 param databaseSecretName string = 'database-url'
 
@@ -94,6 +97,7 @@ module backend './modules/backend-hosting.bicep' = {
     containerPort: backendContainerPort
     corsAllowedOrigins: 'https://${frontend.outputs.defaultHostname}'
     logDailyQuotaGb: logDailyQuotaGb
+    alertEmailAddress: alertEmailAddress
     keyVaultName: secrets.outputs.name
     keyVaultUri: secrets.outputs.uri
     databaseSecretName: databaseSecretName
@@ -113,5 +117,7 @@ output frontendUrl string = 'https://${frontend.outputs.defaultHostname}'
 output keyVaultName string = secrets.outputs.name
 output keyVaultUri string = secrets.outputs.uri
 output applicationInsightsName string = backend.outputs.applicationInsightsName
+output availabilityTestName string = backend.outputs.availabilityTestName
+output alertActionGroupName string = backend.outputs.alertActionGroupName
 output backendIdentityName string = backend.outputs.managedIdentityName
 output backendIdentityPrincipalId string = backend.outputs.managedIdentityPrincipalId

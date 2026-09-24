@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import HTTPExceptionHandler
 
 from prepwise_api.observability import REQUEST_ID_HEADER, resolve_request_id
+from prepwise_api.telemetry import record_safe_exception
 
 error_logger = logging.getLogger("prepwise.errors")
 
@@ -100,6 +101,7 @@ async def database_exception_handler(
     request: Request,
     exception: SQLAlchemyError,
 ) -> JSONResponse:
+    record_safe_exception(exception)
     error_logger.exception(
         "Database request failed",
         exc_info=exception,
@@ -122,6 +124,7 @@ async def unhandled_exception_handler(
     request: Request,
     exception: Exception,
 ) -> JSONResponse:
+    record_safe_exception(exception)
     error_logger.exception(
         "Unhandled application error",
         exc_info=exception,

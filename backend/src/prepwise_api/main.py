@@ -26,6 +26,7 @@ from prepwise_api.observability import (
     reset_request_id,
     resolve_request_id,
 )
+from prepwise_api.telemetry import correlate_request_span, record_safe_exception
 
 settings = get_settings()
 configure_logging(settings.log_level)
@@ -65,6 +66,7 @@ async def log_request(
     """Correlate and log requests without recording headers, tokens or query values."""
     request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
     request.state.request_id = request_id
+    trace_id = correlate_request_span(request_id)
     token = bind_request_id(request_id)
     started_at = perf_counter()
     try:
@@ -78,6 +80,7 @@ async def log_request(
                 "path": request.url.path,
                 "duration_ms": round((perf_counter() - started_at) * 1000, 2),
                 "error_type": type(error).__name__,
+                "trace_id": trace_id,
             },
         )
         raise
@@ -91,6 +94,7 @@ async def log_request(
                 "path": request.url.path,
                 "status_code": response.status_code,
                 "duration_ms": round((perf_counter() - started_at) * 1000, 2),
+                "trace_id": trace_id,
             },
         )
         return response
@@ -112,6 +116,7 @@ def readiness() -> dict[str, str]:
     try:
         check_database_connection()
     except Exception as error:
+        record_safe_exception(error)
         health_logger.exception(
             "Readiness check failed",
             extra={

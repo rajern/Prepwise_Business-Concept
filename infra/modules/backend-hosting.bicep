@@ -8,6 +8,7 @@ param containerImage string
 param containerPort int
 param corsAllowedOrigins string
 param logDailyQuotaGb string
+param alertEmailAddress string
 param keyVaultName string
 param keyVaultUri string
 param databaseSecretName string
@@ -168,6 +169,10 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
               name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
               value: applicationInsights.properties.ConnectionString
             }
+            {
+              name: 'OTEL_SERVICE_NAME'
+              value: 'prepwise-api'
+            }
           ]
           resources: {
             cpu: json('0.25')
@@ -220,11 +225,192 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
   dependsOn: [databaseSecretAccess]
 }
 
+resource alertActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-${namePrefix}-operations'
+  location: 'global'
+  tags: tags
+  properties: {
+    groupShortName: 'PrepwiseOps'
+    enabled: true
+    emailReceivers: empty(alertEmailAddress) ? [] : [
+      {
+        name: 'Primary operator'
+        emailAddress: alertEmailAddress
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+resource availabilityTest 'Microsoft.Insights/webTests@2022-06-15' = {
+  name: 'webtest-${namePrefix}-ready'
+  location: location
+  kind: 'standard'
+  tags: union(tags, {
+    'hidden-link:${applicationInsights.id}': 'Resource'
+  })
+  properties: {
+    SyntheticMonitorId: 'webtest-${namePrefix}-ready'
+    Name: 'Prepwise backend readiness'
+    Description: 'Checks the production API and its critical PostgreSQL dependency.'
+    Enabled: true
+    Frequency: 300
+    Timeout: 30
+    Kind: 'standard'
+    RetryEnabled: true
+    Locations: [
+      {
+        Id: 'emea-nl-ams-azr'
+      }
+      {
+        Id: 'us-va-ash-azr'
+      }
+      {
+        Id: 'apac-jp-kaw-edge'
+      }
+    ]
+    Request: {
+      RequestUrl: 'https://${containerApp.properties.configuration.ingress.fqdn}/health/ready'
+      HttpVerb: 'GET'
+      FollowRedirects: false
+      ParseDependentRequests: false
+    }
+    ValidationRules: {
+      ExpectedHttpStatusCode: 200
+      IgnoreHttpStatusCode: false
+      SSLCheck: true
+      SSLCertRemainingLifetimeCheck: 7
+    }
+  }
+}
+
+resource availabilityAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-${namePrefix}-availability'
+  location: 'global'
+  tags: union(tags, {
+    'hidden-link:${applicationInsights.id}': 'Resource'
+    'hidden-link:${availabilityTest.id}': 'Resource'
+  })
+  properties: {
+    description: 'Prepwise readiness failed from at least two Azure test locations.'
+    severity: 1
+    enabled: true
+    autoMitigate: true
+    scopes: [
+      availabilityTest.id
+      applicationInsights.id
+    ]
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.WebtestLocationAvailabilityCriteria'
+      webTestId: availabilityTest.id
+      componentId: applicationInsights.id
+      failedLocationCount: 2
+    }
+    actions: [
+      {
+        actionGroupId: alertActionGroup.id
+      }
+    ]
+  }
+}
+
+resource serverErrorAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-${namePrefix}-server-errors'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Prepwise returned at least one HTTP 5xx response in five minutes.'
+    severity: 2
+    enabled: true
+    autoMitigate: true
+    scopes: [
+      applicationInsights.id
+    ]
+    evaluationFrequency: 'PT1M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'ServerErrorCount'
+          metricName: 'requests/count'
+          metricNamespace: 'microsoft.insights/components'
+          operator: 'GreaterThan'
+          threshold: 0
+          timeAggregation: 'Count'
+          skipMetricValidation: false
+          dimensions: [
+            {
+              name: 'request/resultCode'
+              operator: 'Include'
+              values: [
+                '500'
+                '501'
+                '502'
+                '503'
+                '504'
+              ]
+            }
+          ]
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: alertActionGroup.id
+      }
+    ]
+  }
+}
+
+resource latencyAlert 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-${namePrefix}-latency'
+  location: 'global'
+  tags: tags
+  properties: {
+    description: 'Prepwise average backend response time exceeded five seconds.'
+    severity: 3
+    enabled: true
+    autoMitigate: true
+    scopes: [
+      applicationInsights.id
+    ]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'AverageResponseLatency'
+          metricName: 'requests/duration'
+          metricNamespace: 'microsoft.insights/components'
+          operator: 'GreaterThan'
+          threshold: 5000
+          timeAggregation: 'Average'
+          skipMetricValidation: false
+          dimensions: []
+        }
+      ]
+    }
+    actions: [
+      {
+        actionGroupId: alertActionGroup.id
+      }
+    ]
+  }
+}
+
 output containerAppId string = containerApp.id
 output containerAppName string = containerApp.name
 output fqdn string = containerApp.properties.configuration.ingress.fqdn
 output applicationInsightsId string = applicationInsights.id
 output applicationInsightsName string = applicationInsights.name
+output availabilityTestName string = availabilityTest.name
+output alertActionGroupName string = alertActionGroup.name
 output logAnalyticsWorkspaceId string = logAnalytics.id
 output managedIdentityName string = managedIdentity.name
 output managedIdentityPrincipalId string = managedIdentity.properties.principalId

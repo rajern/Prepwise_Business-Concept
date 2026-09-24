@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from prepwise_api.config import Settings, get_settings
 from prepwise_api.database import get_session
 from prepwise_api.models import User, UserRole
+from prepwise_api.telemetry import record_safe_exception
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +144,7 @@ def get_access_token_claims(
     except InvalidAccessTokenError as error:
         raise _unauthorized() from error
     except SigningKeysUnavailableError as error:
+        record_safe_exception(error)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Authentication service is temporarily unavailable",

@@ -13,6 +13,7 @@ _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
 _SAFE_EXTRA_FIELDS = (
     "event",
     "request_id",
+    "trace_id",
     "method",
     "path",
     "status_code",

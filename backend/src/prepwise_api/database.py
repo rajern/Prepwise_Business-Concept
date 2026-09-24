@@ -6,6 +6,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from prepwise_api.config import get_settings
+from prepwise_api.telemetry import instrument_sqlalchemy
 
 
 def database_connect_args(app_env: str) -> dict[str, str]:
@@ -17,11 +18,13 @@ def database_connect_args(app_env: str) -> dict[str, str]:
 def get_engine() -> Engine:
     """Create the shared SQLAlchemy engine from environment configuration."""
     settings = get_settings()
-    return create_engine(
+    engine = create_engine(
         settings.database_url,
         pool_pre_ping=True,
         connect_args=database_connect_args(settings.app_env),
     )
+    instrument_sqlalchemy(engine)
+    return engine
 
 
 def get_session() -> Iterator[Session]:

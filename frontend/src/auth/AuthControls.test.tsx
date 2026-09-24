@@ -95,8 +95,14 @@ describe('AuthControls', () => {
 
   it('acquires API access silently and signs the current account out', async () => {
     const { acquireTokenSilent, logoutRedirect } = configureMsalContext(true)
+    const onAccessTokenChange = vi.fn()
 
-    render(<AuthControls apiScope={apiScope} />)
+    render(
+      <AuthControls
+        apiScope={apiScope}
+        onAccessTokenChange={onAccessTokenChange}
+      />,
+    )
 
     expect(
       await screen.findByText('Signed in · API access ready · customer'),
@@ -106,6 +112,7 @@ describe('AuthControls', () => {
       scopes: [apiScope],
     })
     expect(fetchCurrentUser).toHaveBeenCalledWith('not-a-real-token')
+    expect(onAccessTokenChange).toHaveBeenLastCalledWith('not-a-real-token')
 
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
 
@@ -115,5 +122,6 @@ describe('AuthControls', () => {
         postLogoutRedirectUri: 'http://localhost:3000/',
       })
     })
+    expect(onAccessTokenChange).toHaveBeenLastCalledWith(null)
   })
 })

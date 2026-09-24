@@ -34,6 +34,14 @@ const secondMeal = {
   allergens: [],
 }
 
+const pickupLocation = {
+  id: 'd8d25ca1-8892-4dc7-a12f-b12ed48fb9e1',
+  name: 'Prepwise Grünerløkka',
+  address_line: 'Thorvald Meyers gate 35',
+  postal_code: '0555',
+  city: 'Oslo',
+}
+
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -155,6 +163,88 @@ describe('App', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'This meal could not be found',
+    )
+  })
+
+  it('persists cart mutations and lets the customer select a pickup location', async () => {
+    let quantity = 0
+    const cartResponse = () => ({
+      items:
+        quantity === 0
+          ? []
+          : [
+              {
+                id: 'c1c49342-a18f-4fd8-a555-e657577cc9db',
+                quantity,
+                line_total_nok: String(129 * quantity),
+                meal: { ...meal, available: true },
+              },
+            ],
+      total_quantity: quantity,
+      total_nok: quantity === 0 ? '0.00' : String(129 * quantity),
+    })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = input.toString()
+      if (path === '/api/meals') {
+        return { ok: true, json: async () => [meal] }
+      }
+      if (path === '/api/pickup-locations') {
+        return { ok: true, json: async () => [pickupLocation] }
+      }
+      if (path === '/api/cart' && !init?.method) {
+        return { ok: true, json: async () => cartResponse() }
+      }
+      if (path === '/api/cart/items' && init?.method === 'POST') {
+        quantity += 1
+        return { ok: true, json: async () => cartResponse() }
+      }
+      if (path.includes('/api/cart/items/') && init?.method === 'PATCH') {
+        quantity = JSON.parse(init.body as string).quantity as number
+        return { ok: true, json: async () => cartResponse() }
+      }
+      if (path.includes('/api/cart/items/') && init?.method === 'DELETE') {
+        quantity = 0
+        return { ok: true }
+      }
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <App
+        apiScope="api://prepwise/access_as_user"
+        initialAccessToken="test-access-token"
+      />,
+    )
+
+    expect(await screen.findByText(/Your cart is empty/)).toBeInTheDocument()
+    await screen.findByRole('heading', { name: meal.name })
+    fireEvent.click(screen.getByRole('button', { name: 'Add to cart' }))
+
+    expect(await screen.findByText('1 meal')).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: `Increase ${meal.name}` }),
+    )
+    expect(await screen.findByText('2 meals')).toBeInTheDocument()
+
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Pickup location' }),
+      { target: { value: pickupLocation.id } },
+    )
+    expect(
+      screen.getByRole('combobox', { name: 'Pickup location' }),
+    ).toHaveValue(pickupLocation.id)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    expect(await screen.findByText(/Your cart is empty/)).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/cart/items',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-access-token',
+        }),
+      }),
     )
   })
 })

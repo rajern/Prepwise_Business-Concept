@@ -13,11 +13,15 @@ import { reportAuthError } from './diagnostics'
 
 interface AuthControlsProps {
   apiScope: string
+  onAccessTokenChange?: (accessToken: string | null) => void
 }
 
 type TokenStatus = 'loading' | 'ready' | 'interaction-required' | 'error'
 
-export function AuthControls({ apiScope }: AuthControlsProps) {
+export function AuthControls({
+  apiScope,
+  onAccessTokenChange,
+}: AuthControlsProps) {
   const { accounts, inProgress, instance } = useMsal()
   const isAuthenticated = useIsAuthenticated()
   const account = instance.getActiveAccount() ?? accounts[0] ?? null
@@ -29,6 +33,7 @@ export function AuthControls({ apiScope }: AuthControlsProps) {
         apiScope={apiScope}
         instance={instance}
         interactionInProgress={interactionInProgress}
+        onAccessTokenChange={onAccessTokenChange}
       />
     )
   }
@@ -40,6 +45,7 @@ export function AuthControls({ apiScope }: AuthControlsProps) {
       apiScope={apiScope}
       instance={instance}
       interactionInProgress={interactionInProgress}
+      onAccessTokenChange={onAccessTokenChange}
     />
   )
 }
@@ -53,10 +59,12 @@ function SignedOutControls({
   apiScope,
   instance,
   interactionInProgress,
+  onAccessTokenChange,
 }: SignedOutControlsProps) {
   const [interactionError, setInteractionError] = useState(false)
 
   function signIn() {
+    onAccessTokenChange?.(null)
     setInteractionError(false)
     void instance.loginRedirect(createLoginRequest(apiScope)).catch((error) => {
       reportAuthError('login redirect', error)
@@ -94,6 +102,7 @@ function SignedInControls({
   apiScope,
   instance,
   interactionInProgress,
+  onAccessTokenChange,
 }: SignedInControlsProps) {
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>('loading')
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
@@ -106,12 +115,17 @@ function SignedInControls({
 
     let cancelled = false
 
+    onAccessTokenChange?.(null)
     void acquireApiAccessToken(instance, account, apiScope)
-      .then(fetchCurrentUser)
-      .then((user) => {
+      .then(async (accessToken) => ({
+        accessToken,
+        user: await fetchCurrentUser(accessToken),
+      }))
+      .then(({ accessToken, user }) => {
         if (!cancelled) {
           setCurrentUser(user)
           setTokenStatus('ready')
+          onAccessTokenChange?.(accessToken)
         }
       })
       .catch((error: unknown) => {
@@ -124,12 +138,13 @@ function SignedInControls({
             ? 'interaction-required'
             : 'error',
         )
+        onAccessTokenChange?.(null)
       })
 
     return () => {
       cancelled = true
     }
-  }, [account, apiScope, instance, interactionInProgress])
+  }, [account, apiScope, instance, interactionInProgress, onAccessTokenChange])
 
   function requestApiAccess() {
     setInteractionError(false)
@@ -145,6 +160,7 @@ function SignedInControls({
   }
 
   function signOut() {
+    onAccessTokenChange?.(null)
     setInteractionError(false)
     void instance
       .logoutRedirect({

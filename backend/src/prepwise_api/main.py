@@ -1,7 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from prepwise_api.api import admin_router, meals_router, users_router
+from prepwise_api.api import (
+    admin_router,
+    cart_router,
+    meals_router,
+    pickup_locations_router,
+    users_router,
+)
 from prepwise_api.config import get_settings
 from prepwise_api.database import check_database_connection
 
@@ -16,10 +22,12 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
 )
 app.include_router(meals_router)
+app.include_router(cart_router)
+app.include_router(pickup_locations_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 

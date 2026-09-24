@@ -1,5 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
+import {
+  addCartItem,
+  type Cart,
+  CartRequestError,
+  fetchCart,
+  removeCartItem,
+  updateCartItem,
+} from './api/cart'
 import {
   fetchMeal,
   fetchMeals,
@@ -7,6 +15,10 @@ import {
   type Meal,
   type MealDetail,
 } from './api/meals'
+import {
+  fetchPickupLocations,
+  type PickupLocation,
+} from './api/pickupLocations'
 import { AuthControls } from './auth/AuthControls'
 
 const nokFormatter = new Intl.NumberFormat('nb-NO', {
@@ -19,9 +31,10 @@ type CatalogueFilter = 'all' | 'high-protein' | 'under-600'
 
 interface AppProps {
   apiScope: string
+  initialAccessToken?: string | null
 }
 
-export function App({ apiScope }: AppProps) {
+export function App({ apiScope, initialAccessToken = null }: AppProps) {
   const [meals, setMeals] = useState<Meal[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [requestNumber, setRequestNumber] = useState(0)
@@ -31,6 +44,22 @@ export function App({ apiScope }: AppProps) {
   const [selectedMealId, setSelectedMealId] = useState<string | null>(null)
   const [mealDetail, setMealDetail] = useState<MealDetail | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(initialAccessToken)
+  const [cart, setCart] = useState<Cart | null>(null)
+  const [cartError, setCartError] = useState<string | null>(null)
+  const [cartMutationKey, setCartMutationKey] = useState<string | null>(null)
+  const [pickupLocations, setPickupLocations] = useState<PickupLocation[] | null>(
+    null,
+  )
+  const [selectedPickupId, setSelectedPickupId] = useState('')
+
+  const handleAccessTokenChange = useCallback((nextAccessToken: string | null) => {
+    setAccessToken(nextAccessToken)
+    setCart(null)
+    setCartError(null)
+    setPickupLocations(null)
+    setSelectedPickupId('')
+  }, [])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -69,6 +98,32 @@ export function App({ apiScope }: AppProps) {
 
     return () => controller.abort()
   }, [selectedMealId])
+
+  useEffect(() => {
+    if (!accessToken) {
+      return
+    }
+
+    const controller = new AbortController()
+
+    void fetchCart(accessToken, controller.signal)
+      .then(setCart)
+      .catch((reason: unknown) => {
+        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+          setCartError('We could not load your cart. Please try again.')
+        }
+      })
+
+    void fetchPickupLocations(controller.signal)
+      .then(setPickupLocations)
+      .catch((reason: unknown) => {
+        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+          setCartError('We could not load the pickup locations. Please try again.')
+        }
+      })
+
+    return () => controller.abort()
+  }, [accessToken])
 
   const filteredMeals = useMemo(() => {
     if (!meals) {
@@ -110,13 +165,67 @@ export function App({ apiScope }: AppProps) {
     setSelectedMealId(mealId)
   }
 
+  async function addMeal(mealId: string) {
+    if (!accessToken) {
+      return
+    }
+    await runCartMutation(`meal-${mealId}`, () => addCartItem(accessToken, mealId))
+  }
+
+  async function changeQuantity(itemId: string, quantity: number) {
+    if (!accessToken) {
+      return
+    }
+    await runCartMutation(itemId, () =>
+      updateCartItem(accessToken, itemId, quantity),
+    )
+  }
+
+  async function removeItem(itemId: string) {
+    if (!accessToken) {
+      return
+    }
+    setCartMutationKey(itemId)
+    setCartError(null)
+    try {
+      await removeCartItem(accessToken, itemId)
+      setCart(await fetchCart(accessToken))
+    } catch {
+      setCartError('We could not update your cart. Please try again.')
+    } finally {
+      setCartMutationKey(null)
+    }
+  }
+
+  async function runCartMutation(
+    key: string,
+    mutation: () => Promise<Cart>,
+  ) {
+    setCartMutationKey(key)
+    setCartError(null)
+    try {
+      setCart(await mutation())
+    } catch (reason: unknown) {
+      setCartError(
+        reason instanceof CartRequestError && reason.status === 409
+          ? 'That meal is no longer available.'
+          : 'We could not update your cart. Please try again.',
+      )
+    } finally {
+      setCartMutationKey(null)
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
         <a className="brand" href="/" aria-label="Prepwise home">
           Prepwise
         </a>
-        <AuthControls apiScope={apiScope} />
+        <AuthControls
+          apiScope={apiScope}
+          onAccessTokenChange={handleAccessTokenChange}
+        />
       </header>
       <section className="hero">
         <p className="eyebrow">Pickup meals in Oslo</p>
@@ -126,6 +235,19 @@ export function App({ apiScope }: AppProps) {
           convenient location in Oslo.
         </p>
       </section>
+
+      {accessToken && (
+        <CartPanel
+          cart={cart}
+          error={cartError}
+          mutationKey={cartMutationKey}
+          pickupLocations={pickupLocations}
+          selectedPickupId={selectedPickupId}
+          onPickupChange={setSelectedPickupId}
+          onQuantityChange={changeQuantity}
+          onRemove={removeItem}
+        />
+      )}
 
       <section className="catalogue" aria-labelledby="catalogue-heading">
         <div className="section-heading">
@@ -199,6 +321,11 @@ export function App({ apiScope }: AppProps) {
           <MealDetailPanel
             detail={mealDetail}
             error={detailError}
+            canAdd={Boolean(accessToken)}
+            isAdding={
+              mealDetail ? cartMutationKey === `meal-${mealDetail.id}` : false
+            }
+            onAdd={addMeal}
             onClose={closeMealDetails}
           />
         )}
@@ -209,6 +336,9 @@ export function App({ apiScope }: AppProps) {
               <MealCard
                 key={meal.id}
                 meal={meal}
+                canAdd={Boolean(accessToken)}
+                isAdding={cartMutationKey === `meal-${meal.id}`}
+                onAdd={() => void addMeal(meal.id)}
                 onOpen={() => openMealDetails(meal.id)}
               />
             ))}
@@ -221,10 +351,13 @@ export function App({ apiScope }: AppProps) {
 
 interface MealCardProps {
   meal: Meal
+  canAdd: boolean
+  isAdding: boolean
+  onAdd: () => void
   onOpen: () => void
 }
 
-function MealCard({ meal, onOpen }: MealCardProps) {
+function MealCard({ meal, canAdd, isAdding, onAdd, onOpen }: MealCardProps) {
   return (
     <article className="meal-card">
       <MealArtwork meal={meal} />
@@ -245,9 +378,19 @@ function MealCard({ meal, onOpen }: MealCardProps) {
             <span className="allergens__none">No declared allergens</span>
           )}
         </div>
-        <button className="detail-button" type="button" onClick={onOpen}>
-          View details
-        </button>
+        <div className="meal-actions">
+          <button className="detail-button" type="button" onClick={onOpen}>
+            View details
+          </button>
+          <button
+            className="add-button"
+            type="button"
+            disabled={!canAdd || isAdding}
+            onClick={onAdd}
+          >
+            {isAdding ? 'Adding…' : canAdd ? 'Add to cart' : 'Sign in to add'}
+          </button>
+        </div>
       </div>
     </article>
   )
@@ -256,10 +399,20 @@ function MealCard({ meal, onOpen }: MealCardProps) {
 interface MealDetailPanelProps {
   detail: MealDetail | null
   error: string | null
+  canAdd: boolean
+  isAdding: boolean
+  onAdd: (mealId: string) => Promise<void>
   onClose: () => void
 }
 
-function MealDetailPanel({ detail, error, onClose }: MealDetailPanelProps) {
+function MealDetailPanel({
+  detail,
+  error,
+  canAdd,
+  isAdding,
+  onAdd,
+  onClose,
+}: MealDetailPanelProps) {
   return (
     <section className="meal-detail" aria-labelledby="meal-detail-heading">
       <div className="meal-detail__header">
@@ -312,7 +465,159 @@ function MealDetailPanel({ detail, error, onClose }: MealDetailPanelProps) {
                 </p>
               </div>
             </div>
+            <button
+              className="add-button add-button--detail"
+              type="button"
+              disabled={!canAdd || !detail.available || isAdding}
+              onClick={() => void onAdd(detail.id)}
+            >
+              {isAdding
+                ? 'Adding…'
+                : !detail.available
+                  ? 'Currently unavailable'
+                  : canAdd
+                    ? 'Add to cart'
+                    : 'Sign in to add'}
+            </button>
           </div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+interface CartPanelProps {
+  cart: Cart | null
+  error: string | null
+  mutationKey: string | null
+  pickupLocations: PickupLocation[] | null
+  selectedPickupId: string
+  onPickupChange: (locationId: string) => void
+  onQuantityChange: (itemId: string, quantity: number) => Promise<void>
+  onRemove: (itemId: string) => Promise<void>
+}
+
+function CartPanel({
+  cart,
+  error,
+  mutationKey,
+  pickupLocations,
+  selectedPickupId,
+  onPickupChange,
+  onQuantityChange,
+  onRemove,
+}: CartPanelProps) {
+  return (
+    <section className="cart-panel" aria-labelledby="cart-heading">
+      <div className="cart-panel__heading">
+        <div>
+          <p className="eyebrow">Your order</p>
+          <h2 id="cart-heading">Shopping cart</h2>
+        </div>
+        {cart && (
+          <span className="cart-count">
+            {cart.total_quantity} {cart.total_quantity === 1 ? 'meal' : 'meals'}
+          </span>
+        )}
+      </div>
+
+      {!cart && !error && (
+        <div className="cart-state" role="status">
+          Loading your cart…
+        </div>
+      )}
+      {error && (
+        <div className="cart-state cart-state--error" role="alert">
+          {error}
+        </div>
+      )}
+      {cart && cart.items.length === 0 && (
+        <div className="cart-state">Your cart is empty. Add a meal below.</div>
+      )}
+
+      {cart && cart.items.length > 0 && (
+        <div className="cart-layout">
+          <div className="cart-items">
+            {cart.items.map((item) => {
+              const isMutating = mutationKey === item.id
+              return (
+                <article className="cart-item" key={item.id}>
+                  <div>
+                    <h3>{item.meal.name}</h3>
+                    <p>
+                      {nokFormatter.format(Number(item.meal.price_nok))} each
+                      {!item.meal.available && (
+                        <span className="cart-item__unavailable">
+                          {' '}· unavailable
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="quantity-control" aria-label={`Quantity for ${item.meal.name}`}>
+                    <button
+                      type="button"
+                      disabled={isMutating || item.quantity <= 1}
+                      aria-label={`Decrease ${item.meal.name}`}
+                      onClick={() =>
+                        void onQuantityChange(item.id, item.quantity - 1)
+                      }
+                    >
+                      −
+                    </button>
+                    <span>{item.quantity}</span>
+                    <button
+                      type="button"
+                      disabled={
+                        isMutating || !item.meal.available || item.quantity >= 99
+                      }
+                      aria-label={`Increase ${item.meal.name}`}
+                      onClick={() =>
+                        void onQuantityChange(item.id, item.quantity + 1)
+                      }
+                    >
+                      +
+                    </button>
+                  </div>
+                  <strong>{nokFormatter.format(Number(item.line_total_nok))}</strong>
+                  <button
+                    className="remove-button"
+                    type="button"
+                    disabled={isMutating}
+                    onClick={() => void onRemove(item.id)}
+                  >
+                    Remove
+                  </button>
+                </article>
+              )
+            })}
+          </div>
+
+          <aside className="cart-summary">
+            <div className="cart-total">
+              <span>Total</span>
+              <strong>{nokFormatter.format(Number(cart.total_nok))}</strong>
+            </div>
+            <label className="pickup-field">
+              <span>Pickup location</span>
+              <select
+                value={selectedPickupId}
+                disabled={!pickupLocations || pickupLocations.length === 0}
+                onChange={(event) => onPickupChange(event.target.value)}
+              >
+                <option value="">Choose a pickup location</option>
+                {pickupLocations?.map((location) => (
+                  <option key={location.id} value={location.id}>
+                    {location.name} — {location.address_line}, {location.postal_code}{' '}
+                    {location.city}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <p className="checkout-note">
+              Your cart and quantities are saved to your account. Checkout is the
+              next step.
+            </p>
+          </aside>
         </div>
       )}
     </section>

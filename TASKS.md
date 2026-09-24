@@ -303,7 +303,7 @@ Implement customer signup and login.
 
 ### T5.1 — Meal catalogue
 
-**Status:** In progress — implementation underway
+**Status:** Complete
 
 Implement:
 
@@ -321,7 +321,7 @@ Implement:
 
 ### T5.2 — Meal details
 
-**Status:** In progress — implementation underway
+**Status:** Complete
 
 Display:
 
@@ -345,6 +345,8 @@ Display:
 
 ### T5.3 — Persistent shopping cart
 
+**Status:** In progress — implementation and production verification underway
+
 Implement:
 
 * get cart
@@ -363,6 +365,8 @@ Implement:
 ---
 
 ### T5.4 — Pickup selection
+
+**Status:** In progress — implementation and production verification underway
 
 **Acceptance criteria:**
 

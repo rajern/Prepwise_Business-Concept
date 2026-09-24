@@ -94,3 +94,15 @@ jobs:
 
       - name: Build backend image
         run: docker build --tag prepwise-api:ci ./backend
+
+  infrastructure:
+    name: Infrastructure quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Validate Bicep
+        run: az bicep build --file infra/main.bicep --stdout > /dev/null

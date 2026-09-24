@@ -120,10 +120,62 @@ jobs:
             --name "$AZURE_CONTAINER_APP" \
             --image "$BACKEND_IMAGE" \
             --set-env-vars \
+              "LOG_LEVEL=INFO" \
               "ENTRA_TENANT_ID=$ENTRA_TENANT_ID" \
               "ENTRA_TENANT_SUBDOMAIN=$ENTRA_TENANT_SUBDOMAIN" \
               "ENTRA_API_CLIENT_ID=$ENTRA_API_CLIENT_ID" \
               "ENTRA_API_SCOPE=$ENTRA_API_DELEGATED_SCOPE" \
+            --output none
+          az containerapp show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --query properties.template \
+            --output json > "$RUNNER_TEMP/container-app-template.json"
+          jq '
+            del(.revisionSuffix)
+            | walk(
+                if type == "object" then
+                  with_entries(select(.value != null))
+                else
+                  .
+                end
+              )
+            | .containers[0].env |= map(
+                if has("secretRef") then del(.value) else . end
+              )
+            | .containers[0].probes = [
+                {
+                  "type": "Liveness",
+                  "httpGet": {"path": "/health/live", "port": 8000},
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 15,
+                  "timeoutSeconds": 3,
+                  "failureThreshold": 3,
+                  "successThreshold": 1
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {"path": "/health/ready", "port": 8000},
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 3,
+                  "successThreshold": 1
+                }
+              ]
+            | {"properties": {"template": .}}
+          ' "$RUNNER_TEMP/container-app-template.json" \
+            > "$RUNNER_TEMP/container-app-probes.json"
+          container_app_id="$(az containerapp show \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AZURE_CONTAINER_APP" \
+            --query id \
+            --output tsv)"
+          az rest \
+            --method patch \
+            --uri "https://management.azure.com${container_app_id}?api-version=2025-01-01" \
+            --headers "Content-Type=application/json" \
+            --body "@$RUNNER_TEMP/container-app-probes.json" \
             --output none
           backend_fqdn="$(az containerapp show \
             --resource-group "$AZURE_RESOURCE_GROUP" \
@@ -139,10 +191,10 @@ jobs:
         run: |
           curl --fail --silent --show-error \
             --retry 18 --retry-delay 5 --retry-all-errors \
-            --output /dev/null "$BACKEND_URL/health"
+            --output /dev/null "$BACKEND_URL/health/live"
           curl --fail --silent --show-error \
             --retry 6 --retry-delay 5 --retry-all-errors \
-            --output /dev/null "$BACKEND_URL/health/database"
+            --output /dev/null "$BACKEND_URL/health/ready"
           curl --fail --silent --show-error \
             --retry 6 --retry-delay 5 --retry-all-errors \
             --output /dev/null "$BACKEND_URL/api/meals"

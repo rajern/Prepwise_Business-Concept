@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, time, timedelta
 from decimal import Decimal
 from typing import Annotated
@@ -20,6 +21,7 @@ from prepwise_api.schemas import (
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 OSLO_TIME_ZONE = ZoneInfo("Europe/Oslo")
+logger = logging.getLogger("prepwise.domain.orders")
 
 
 @router.post("", response_model=OrderDetailResponse, status_code=status.HTTP_201_CREATED)
@@ -111,6 +113,15 @@ def create_order(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Created order could not be loaded",
         )
+    logger.info(
+        "Order created",
+        extra={
+            "event": "order.created",
+            "order_id": str(created_order.id),
+            "item_count": len(created_order.items),
+            "total_nok": str(created_order.total_nok),
+        },
+    )
     return _order_detail_response(created_order)
 
 

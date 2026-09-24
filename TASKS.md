@@ -451,7 +451,7 @@ Allow admin to:
 
 ### T6.3 — Pickup location administration
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete — production verified
 
 Allow admin to:
 
@@ -466,7 +466,7 @@ Allow admin to:
 
 ### T6.4 — Order administration
 
-**Status:** In progress — implemented and awaiting production verification
+**Status:** Complete — production verified
 
 Allow admin to:
 
@@ -491,6 +491,8 @@ These requirements should also be applied continuously during earlier tasks.
 
 ### T7.1 — Structured logging
 
+**Status:** In progress — implemented and awaiting production verification
+
 Add structured application logging.
 
 Include:
@@ -509,6 +511,8 @@ Include:
 ---
 
 ### T7.2 — Health checks
+
+**Status:** In progress — implemented and awaiting production verification
 
 Implement:
 

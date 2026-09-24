@@ -142,8 +142,8 @@ python -m venv .venv
 .venv\Scripts\python -m uvicorn prepwise_api.main:app --reload --port 8000
 ```
 
-The frontend is available at `http://localhost:3000`. The backend health endpoint is available
-at `http://localhost:8000/health`, and the public catalogue endpoint is available at
+The frontend is available at `http://localhost:3000`. Backend liveness and readiness are available
+at `http://localhost:8000/health/live` and `http://localhost:8000/health/ready`, and the public catalogue endpoint is available at
 `http://localhost:8000/api/meals`. Vite proxies local `/api` requests to FastAPI.
 
 Run the containerised backend and PostgreSQL from the repository root:
@@ -152,7 +152,7 @@ Run the containerised backend and PostgreSQL from the repository root:
 docker compose up --build -d
 docker compose exec backend python -m alembic upgrade head
 docker compose exec backend python -m prepwise_api.seed
-Invoke-RestMethod http://localhost:8000/health/database
+Invoke-RestMethod http://localhost:8000/health/ready
 ```
 
 The seed command synchronises the development catalogue and can safely be run more than once.

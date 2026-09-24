@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     )
 
     app_env: Literal["development", "test", "production"] = "development"
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     database_url: str = "postgresql+psycopg://prepwise:change-me@localhost:5432/prepwise"
     cors_allowed_origins: str = "http://localhost:3000"
     entra_tenant_id: str = "1a782388-bf90-4ea8-af8f-bcc755f5cd7e"

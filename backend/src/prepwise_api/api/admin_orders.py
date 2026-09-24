@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 from uuid import UUID
 
@@ -17,6 +18,7 @@ from prepwise_api.schemas import (
 )
 
 router = APIRouter(prefix="/api/admin/orders", tags=["admin orders"])
+logger = logging.getLogger("prepwise.domain.orders")
 NEXT_STATUS = {
     OrderStatus.RECEIVED: OrderStatus.PREPARING,
     OrderStatus.PREPARING: OrderStatus.READY_FOR_PICKUP,
@@ -74,6 +76,7 @@ def update_admin_order_status(
             ),
         )
 
+    previous_status = order.status
     order.status = payload.status
     session.commit()
     saved_order = _get_admin_order(session, order_id)
@@ -82,6 +85,15 @@ def update_admin_order_status(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Updated order could not be loaded",
         )
+    logger.info(
+        "Order status updated",
+        extra={
+            "event": "order.status_updated",
+            "order_id": str(saved_order.id),
+            "from_status": previous_status.value,
+            "to_status": saved_order.status.value,
+        },
+    )
     return _admin_order_detail_response(saved_order)
 
 

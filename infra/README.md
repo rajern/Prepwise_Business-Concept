@@ -23,7 +23,8 @@ Apps deployments in `westeurope`; the remaining Azure resources stay in `norwaye
 Container Apps uses consumption-based scaling from zero to one replica. The committed production
 parameters use the public `ghcr.io/rajern/prepwise-api:latest` image on port `8000`. Production
 deployments select an immutable commit tag; `latest` remains the Bicep fallback for later
-infrastructure reconciliation.
+infrastructure reconciliation. HTTP liveness and readiness probes use `/health/live` and
+`/health/ready`; readiness includes a minimal PostgreSQL query.
 
 ## Prerequisites
 
@@ -95,7 +96,8 @@ group; it does not deploy anything or read Key Vault secrets.
 with `database-migration-url`, initialises demo data only when the database has no meals, deploys
 the backend and frontend, and verifies health, database connectivity, catalogue access and CORS.
 The deployment also supplies the public Entra tenant, API audience and delegated-scope values used
-by FastAPI to validate access tokens; no Entra secret is stored or injected.
+by FastAPI to validate access tokens; no Entra secret is stored or injected. It reconciles the
+Container App health probes on each deployment so image-only updates cannot drift from Bicep.
 
 The workflow authenticates to Azure through OIDC. It reads the Static Web Apps deployment token
 at runtime through Azure and masks it; the token is not stored in GitHub. The GHCR package must be

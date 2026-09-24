@@ -137,6 +137,10 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
               value: 'production'
             }
             {
+              name: 'LOG_LEVEL'
+              value: 'INFO'
+            }
+            {
               name: 'CORS_ALLOWED_ORIGINS'
               value: corsAllowedOrigins
             }
@@ -169,6 +173,32 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
             cpu: json('0.25')
             memory: '0.5Gi'
           }
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: {
+                path: '/health/live'
+                port: containerPort
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 15
+              timeoutSeconds: 3
+              failureThreshold: 3
+              successThreshold: 1
+            }
+            {
+              type: 'Readiness'
+              httpGet: {
+                path: '/health/ready'
+                port: containerPort
+              }
+              initialDelaySeconds: 5
+              periodSeconds: 10
+              timeoutSeconds: 5
+              failureThreshold: 3
+              successThreshold: 1
+            }
+          ]
         }
       ]
       scale: {

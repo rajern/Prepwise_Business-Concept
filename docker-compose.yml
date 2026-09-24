@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     environment:
       APP_ENV: ${APP_ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-prepwise}:${POSTGRES_PASSWORD:-change-me}@db:5432/${POSTGRES_DB:-prepwise}
       ENTRA_TENANT_ID: ${ENTRA_TENANT_ID:-1a782388-bf90-4ea8-af8f-bcc755f5cd7e}
       ENTRA_TENANT_SUBDOMAIN: ${ENTRA_TENANT_SUBDOMAIN:-prepwisecustomers}
@@ -20,7 +21,7 @@ services:
         - CMD
         - python
         - -c
-        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)
+        - import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=2)
       interval: 10s
       timeout: 3s
       retries: 3

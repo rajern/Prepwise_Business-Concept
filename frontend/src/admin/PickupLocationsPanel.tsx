@@ -3,11 +3,11 @@ import { useEffect, useState, type FormEvent } from 'react'
 import {
   type AdminPickupLocation,
   type AdminPickupLocationWrite,
-  AdminPickupLocationRequestError,
   createAdminPickupLocation,
   fetchAdminPickupLocations,
   updateAdminPickupLocation,
 } from '../api/adminPickupLocations'
+import { apiErrorMessage } from '../api/errors'
 
 interface PickupLocationsPanelProps {
   accessToken: string
@@ -38,7 +38,9 @@ export function PickupLocationsPanel({
       .then(setLocations)
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-          setLoadError('Pickup locations could not be loaded.')
+          setLoadError(
+            apiErrorMessage(reason, 'Pickup locations could not be loaded.'),
+          )
         }
       })
     return () => controller.abort()
@@ -89,9 +91,7 @@ export function PickupLocationsPanel({
       setSaveMessage(editingId ? 'Pickup location saved.' : 'Pickup location created.')
     } catch (reason: unknown) {
       setSaveError(
-        reason instanceof AdminPickupLocationRequestError
-          ? reason.detail ?? 'The pickup location could not be saved.'
-          : 'The pickup location could not be saved.',
+        apiErrorMessage(reason, 'The pickup location could not be saved.'),
       )
     } finally {
       setSaving(false)

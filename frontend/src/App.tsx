@@ -3,15 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   addCartItem,
   type Cart,
-  CartRequestError,
   fetchCart,
   removeCartItem,
   updateCartItem,
 } from './api/cart'
+import { ApiRequestError, apiErrorMessage } from './api/errors'
 import {
   fetchMeal,
   fetchMeals,
-  MealRequestError,
   type Meal,
   type MealDetail,
 } from './api/meals'
@@ -24,7 +23,6 @@ import {
   fetchOrder,
   fetchOrders,
   type OrderDetail,
-  OrderRequestError,
   type OrderSummary,
 } from './api/orders'
 import type { CurrentUser } from './api/me'
@@ -114,7 +112,7 @@ export function App({
         if (reason instanceof DOMException && reason.name === 'AbortError') {
           return
         }
-        setError('We could not load the menu. Please try again.')
+        setError(apiErrorMessage(reason, 'We could not load the menu. Please try again.'))
       })
 
     return () => controller.abort()
@@ -134,9 +132,12 @@ export function App({
           return
         }
         setDetailError(
-          reason instanceof MealRequestError && reason.status === 404
+          reason instanceof ApiRequestError && reason.status === 404
             ? 'This meal could not be found. It may have been removed.'
-            : 'We could not load the meal details. Please try again.',
+            : apiErrorMessage(
+                reason,
+                'We could not load the meal details. Please try again.',
+              ),
         )
       })
 
@@ -154,7 +155,9 @@ export function App({
       .then(setCart)
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-          setCartError('We could not load your cart. Please try again.')
+          setCartError(
+            apiErrorMessage(reason, 'We could not load your cart. Please try again.'),
+          )
         }
       })
 
@@ -162,7 +165,12 @@ export function App({
       .then(setPickupLocations)
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-          setCartError('We could not load the pickup locations. Please try again.')
+          setCartError(
+            apiErrorMessage(
+              reason,
+              'We could not load the pickup locations. Please try again.',
+            ),
+          )
         }
       })
 
@@ -170,7 +178,12 @@ export function App({
       .then(setOrders)
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-          setOrdersError('We could not load your order history. Please try again.')
+          setOrdersError(
+            apiErrorMessage(
+              reason,
+              'We could not load your order history. Please try again.',
+            ),
+          )
         }
       })
 
@@ -242,8 +255,10 @@ export function App({
     try {
       await removeCartItem(accessToken, itemId)
       setCart(await fetchCart(accessToken))
-    } catch {
-      setCartError('We could not update your cart. Please try again.')
+    } catch (reason: unknown) {
+      setCartError(
+        apiErrorMessage(reason, 'We could not update your cart. Please try again.'),
+      )
     } finally {
       setCartMutationKey(null)
     }
@@ -259,9 +274,12 @@ export function App({
       setCart(await mutation())
     } catch (reason: unknown) {
       setCartError(
-        reason instanceof CartRequestError && reason.status === 409
+        reason instanceof ApiRequestError && reason.status === 409
           ? 'That meal is no longer available.'
-          : 'We could not update your cart. Please try again.',
+          : apiErrorMessage(
+              reason,
+              'We could not update your cart. Please try again.',
+            ),
       )
     } finally {
       setCartMutationKey(null)
@@ -297,9 +315,12 @@ export function App({
       setOrderDetailError(null)
     } catch (reason: unknown) {
       setCartError(
-        reason instanceof OrderRequestError && reason.status === 409
+        reason instanceof ApiRequestError && reason.status === 409
           ? reason.detail ?? 'The order could not be created from this cart.'
-          : 'Checkout failed. Your cart has not been changed.',
+          : apiErrorMessage(
+              reason,
+              'Checkout failed. Your cart has not been changed.',
+            ),
       )
     } finally {
       setIsCheckingOut(false)
@@ -314,8 +335,10 @@ export function App({
     setOrderDetailError(null)
     try {
       setSelectedOrder(await fetchOrder(accessToken, orderId))
-    } catch {
-      setOrderDetailError('We could not load that order. Please try again.')
+    } catch (reason: unknown) {
+      setOrderDetailError(
+        apiErrorMessage(reason, 'We could not load that order. Please try again.'),
+      )
     }
   }
 

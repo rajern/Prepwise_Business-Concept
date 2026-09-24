@@ -175,4 +175,5 @@ def test_admin_meal_inputs_are_validated_and_conflicts_are_safe(
         json=unknown_allergen_payload,
     )
     assert unknown_response.status_code == 422
-    assert unknown_response.json() == {"detail": "Unknown allergen codes: unknown"}
+    assert unknown_response.json()["detail"] == "Unknown allergen codes: unknown"
+    assert unknown_response.json()["code"] == "validation_error"

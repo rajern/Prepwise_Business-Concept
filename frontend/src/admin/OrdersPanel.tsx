@@ -3,11 +3,11 @@ import { useEffect, useState } from 'react'
 import {
   type AdminOrderDetail,
   type AdminOrderSummary,
-  AdminOrderRequestError,
   fetchAdminOrder,
   fetchAdminOrders,
   updateAdminOrderStatus,
 } from '../api/adminOrders'
+import { apiErrorMessage } from '../api/errors'
 import type { OrderStatus } from '../api/orders'
 
 interface OrdersPanelProps {
@@ -43,7 +43,7 @@ export function OrdersPanel({ accessToken }: OrdersPanelProps) {
       .then(setOrders)
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
-          setLoadError('Orders could not be loaded.')
+          setLoadError(apiErrorMessage(reason, 'Orders could not be loaded.'))
         }
       })
     return () => controller.abort()
@@ -54,8 +54,10 @@ export function OrdersPanel({ accessToken }: OrdersPanelProps) {
     setSelectedOrder(null)
     try {
       setSelectedOrder(await fetchAdminOrder(accessToken, orderId))
-    } catch {
-      setDetailError('The order details could not be loaded.')
+    } catch (reason: unknown) {
+      setDetailError(
+        apiErrorMessage(reason, 'The order details could not be loaded.'),
+      )
     }
   }
 
@@ -79,9 +81,7 @@ export function OrdersPanel({ accessToken }: OrdersPanelProps) {
       )
     } catch (reason: unknown) {
       setDetailError(
-        reason instanceof AdminOrderRequestError
-          ? reason.detail ?? 'The order status could not be updated.'
-          : 'The order status could not be updated.',
+        apiErrorMessage(reason, 'The order status could not be updated.'),
       )
     } finally {
       setUpdating(false)

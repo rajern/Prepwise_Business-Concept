@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 import type { OrderDetail, OrderStatus, OrderSummary } from './orders'
 
 export interface AdminOrderSummary extends OrderSummary {
@@ -9,15 +10,6 @@ export interface AdminOrderSummary extends OrderSummary {
 export interface AdminOrderDetail extends OrderDetail {
   customer_email: string | null
   customer_display_name: string | null
-}
-
-export class AdminOrderRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly detail: string | null,
-  ) {
-    super(`Admin order request failed with status ${status}`)
-  }
 }
 
 export function fetchAdminOrders(
@@ -62,14 +54,7 @@ async function adminOrderRequest<T>(
     },
   })
   if (!response.ok) {
-    let detail: string | null = null
-    try {
-      const body = (await response.json()) as { detail?: unknown }
-      detail = typeof body.detail === 'string' ? body.detail : null
-    } catch {
-      // The status remains useful if the API did not return JSON.
-    }
-    throw new AdminOrderRequestError(response.status, detail)
+    throw await apiRequestError(response)
   }
   return (await response.json()) as T
 }

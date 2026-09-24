@@ -102,4 +102,5 @@ def test_get_meal_returns_safe_not_found_response(
     response = client.get("/api/meals/00000000-0000-0000-0000-000000000000")
 
     assert response.status_code == 404
-    assert response.json() == {"detail": "Meal not found"}
+    assert response.json()["detail"] == "Meal not found"
+    assert response.json()["code"] == "not_found"

@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 
 export interface Allergen {
   code: string
@@ -23,13 +24,6 @@ export interface MealDetail extends Meal {
   available: boolean
 }
 
-export class MealRequestError extends Error {
-  constructor(public readonly status: number) {
-    super(`Meal request failed with status ${status}`)
-    this.name = 'MealRequestError'
-  }
-}
-
 export async function fetchMeals(signal?: AbortSignal): Promise<Meal[]> {
   const response = await fetch(apiUrl('/api/meals'), {
     headers: { Accept: 'application/json' },
@@ -37,7 +31,7 @@ export async function fetchMeals(signal?: AbortSignal): Promise<Meal[]> {
   })
 
   if (!response.ok) {
-    throw new MealRequestError(response.status)
+    throw await apiRequestError(response)
   }
 
   return (await response.json()) as Meal[]
@@ -53,7 +47,7 @@ export async function fetchMeal(
   })
 
   if (!response.ok) {
-    throw new MealRequestError(response.status)
+    throw await apiRequestError(response)
   }
 
   return (await response.json()) as MealDetail

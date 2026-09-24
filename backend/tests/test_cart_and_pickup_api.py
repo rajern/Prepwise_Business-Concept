@@ -180,4 +180,5 @@ def test_pickup_locations_only_expose_active_database_rows(
 
     inactive_response = client.get(f"/api/pickup-locations/{inactive_id}")
     assert inactive_response.status_code == 404
-    assert inactive_response.json() == {"detail": "Pickup location not found or inactive"}
+    assert inactive_response.json()["detail"] == "Pickup location not found or inactive"
+    assert inactive_response.json()["code"] == "not_found"

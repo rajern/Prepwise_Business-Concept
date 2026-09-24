@@ -72,7 +72,8 @@ def test_protected_endpoint_rejects_invalid_token(
     response = client.get("/api/me", headers={"Authorization": "Bearer invalid-token"})
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Invalid or expired access token"}
+    assert response.json()["detail"] == "Invalid or expired access token"
+    assert response.json()["code"] == "authentication_required"
 
 
 def test_authenticated_request_creates_and_reuses_local_customer(
@@ -110,7 +111,8 @@ def test_customer_cannot_call_admin_endpoint(
     response = client.get("/api/admin/access", headers=headers)
 
     assert response.status_code == 403
-    assert response.json() == {"detail": "Admin access required"}
+    assert response.json()["detail"] == "Admin access required"
+    assert response.json()["code"] == "forbidden"
 
 
 def test_explicitly_assigned_admin_can_call_admin_endpoint(

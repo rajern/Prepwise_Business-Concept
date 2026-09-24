@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 
 export interface CartMeal {
   id: string
@@ -19,12 +20,6 @@ export interface Cart {
   items: CartItem[]
   total_quantity: number
   total_nok: string
-}
-
-export class CartRequestError extends Error {
-  constructor(public readonly status: number) {
-    super(`Cart request failed with status ${status}`)
-  }
 }
 
 export async function fetchCart(
@@ -64,7 +59,7 @@ export async function removeCartItem(
     headers: { Authorization: `Bearer ${accessToken}` },
   })
   if (!response.ok) {
-    throw new CartRequestError(response.status)
+    throw await apiRequestError(response)
   }
 }
 
@@ -82,7 +77,7 @@ async function cartRequest(
     },
   })
   if (!response.ok) {
-    throw new CartRequestError(response.status)
+    throw await apiRequestError(response)
   }
   return (await response.json()) as Cart
 }

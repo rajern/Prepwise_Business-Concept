@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 import type { Allergen, MealDetail } from './meals'
 
 export interface AdminMealWrite {
@@ -13,15 +14,6 @@ export interface AdminMealWrite {
   ingredients: string[]
   allergen_codes: string[]
   available: boolean
-}
-
-export class AdminMealRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly detail: string | null,
-  ) {
-    super(`Admin meal request failed with status ${status}`)
-  }
 }
 
 export function fetchAdminMeals(
@@ -73,14 +65,7 @@ async function adminRequest<T>(
     },
   })
   if (!response.ok) {
-    let detail: string | null = null
-    try {
-      const body = (await response.json()) as { detail?: unknown }
-      detail = typeof body.detail === 'string' ? body.detail : null
-    } catch {
-      // Status is enough when the backend did not return a JSON error.
-    }
-    throw new AdminMealRequestError(response.status, detail)
+    throw await apiRequestError(response)
   }
   return (await response.json()) as T
 }

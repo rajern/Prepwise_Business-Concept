@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 
 export interface CurrentUser {
   id: string
@@ -16,7 +17,7 @@ export async function fetchCurrentUser(accessToken: string): Promise<CurrentUser
   })
 
   if (!response.ok) {
-    throw new Error(`Current-user request failed with status ${response.status}`)
+    throw await apiRequestError(response)
   }
 
   return (await response.json()) as CurrentUser

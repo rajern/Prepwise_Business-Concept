@@ -150,7 +150,8 @@ def test_admin_can_create_edit_and_deactivate_pickup_locations(
         json={"pickup_location_id": created["id"]},
     )
     assert checkout_response.status_code == 409
-    assert checkout_response.json() == {"detail": "Pickup location is unavailable"}
+    assert checkout_response.json()["detail"] == "Pickup location is unavailable"
+    assert checkout_response.json()["code"] == "conflict"
 
 
 def test_pickup_location_admin_validates_input_and_duplicate_names(

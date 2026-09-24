@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 
 export interface AdminPickupLocation {
   id: string
@@ -15,15 +16,6 @@ export interface AdminPickupLocationWrite {
   postal_code: string
   city: string
   active: boolean
-}
-
-export class AdminPickupLocationRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly detail: string | null,
-  ) {
-    super(`Admin pickup location request failed with status ${status}`)
-  }
 }
 
 export function fetchAdminPickupLocations(
@@ -74,14 +66,7 @@ async function adminPickupRequest<T>(
     },
   })
   if (!response.ok) {
-    let detail: string | null = null
-    try {
-      const body = (await response.json()) as { detail?: unknown }
-      detail = typeof body.detail === 'string' ? body.detail : null
-    } catch {
-      // The status remains useful if the API did not return JSON.
-    }
-    throw new AdminPickupLocationRequestError(response.status, detail)
+    throw await apiRequestError(response)
   }
   return (await response.json()) as T
 }

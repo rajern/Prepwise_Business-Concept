@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 
 export interface PickupLocation {
   id: string
@@ -16,7 +17,7 @@ export async function fetchPickupLocations(
     headers: { Accept: 'application/json' },
   })
   if (!response.ok) {
-    throw new Error(`Pickup locations request failed with status ${response.status}`)
+    throw await apiRequestError(response)
   }
   return (await response.json()) as PickupLocation[]
 }

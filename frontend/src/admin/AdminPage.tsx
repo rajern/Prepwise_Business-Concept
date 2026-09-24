@@ -2,12 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import {
   type AdminMealWrite,
-  AdminMealRequestError,
   createAdminMeal,
   fetchAdminAllergens,
   fetchAdminMeals,
   updateAdminMeal,
 } from '../api/adminMeals'
+import { ApiRequestError, apiErrorMessage } from '../api/errors'
 import type { Allergen, MealDetail } from '../api/meals'
 import { OrdersPanel } from './OrdersPanel'
 import { PickupLocationsPanel } from './PickupLocationsPanel'
@@ -125,9 +125,9 @@ function MealAdministration({ accessToken }: AdminPageProps) {
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
           setLoadError(
-            reason instanceof AdminMealRequestError && reason.status === 403
+            reason instanceof ApiRequestError && reason.status === 403
               ? 'Your account does not have admin access.'
-              : 'The admin catalogue could not be loaded.',
+              : apiErrorMessage(reason, 'The admin catalogue could not be loaded.'),
           )
         }
       })
@@ -205,9 +205,7 @@ function MealAdministration({ accessToken }: AdminPageProps) {
       setSaveMessage(editingId ? 'Meal changes saved.' : 'Meal created.')
     } catch (reason: unknown) {
       setSaveError(
-        reason instanceof AdminMealRequestError
-          ? reason.detail ?? 'The meal could not be saved.'
-          : 'The meal could not be saved.',
+        apiErrorMessage(reason, 'The meal could not be saved.'),
       )
     } finally {
       setSaving(false)

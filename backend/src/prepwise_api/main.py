@@ -18,6 +18,7 @@ from prepwise_api.api import (
 )
 from prepwise_api.config import get_settings
 from prepwise_api.database import check_database_connection
+from prepwise_api.errors import install_exception_handlers
 from prepwise_api.observability import (
     REQUEST_ID_HEADER,
     bind_request_id,
@@ -35,6 +36,7 @@ app = FastAPI(
     title="Prepwise API",
     version="0.1.0",
 )
+install_exception_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,

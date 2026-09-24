@@ -1,4 +1,5 @@
 import { apiUrl } from './config'
+import { apiRequestError } from './errors'
 
 export type OrderStatus =
   | 'received'
@@ -27,15 +28,6 @@ export interface OrderItem {
 
 export interface OrderDetail extends OrderSummary {
   items: OrderItem[]
-}
-
-export class OrderRequestError extends Error {
-  constructor(
-    public readonly status: number,
-    public readonly detail: string | null,
-  ) {
-    super(`Order request failed with status ${status}`)
-  }
 }
 
 export async function fetchOrders(
@@ -77,14 +69,7 @@ async function orderRequest<T>(
     },
   })
   if (!response.ok) {
-    let detail: string | null = null
-    try {
-      const body = (await response.json()) as { detail?: unknown }
-      detail = typeof body.detail === 'string' ? body.detail : null
-    } catch {
-      // The status is still sufficient when the API did not return JSON.
-    }
-    throw new OrderRequestError(response.status, detail)
+    throw await apiRequestError(response)
   }
   return (await response.json()) as T
 }

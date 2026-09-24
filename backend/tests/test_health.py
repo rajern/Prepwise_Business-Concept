@@ -54,7 +54,8 @@ def test_readiness_returns_safe_503_when_database_fails(
     response = client.get("/health/ready")
 
     assert response.status_code == 503
-    assert response.json() == {"detail": "Database is unavailable"}
+    assert response.json()["detail"] == "Database is unavailable"
+    assert response.json()["code"] == "service_unavailable"
     assert "credential" not in response.text
 
 

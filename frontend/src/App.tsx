@@ -19,12 +19,30 @@ import {
   fetchPickupLocations,
   type PickupLocation,
 } from './api/pickupLocations'
+import {
+  createOrder,
+  fetchOrder,
+  fetchOrders,
+  type OrderDetail,
+  OrderRequestError,
+  type OrderSummary,
+} from './api/orders'
 import { AuthControls } from './auth/AuthControls'
 
 const nokFormatter = new Intl.NumberFormat('nb-NO', {
   style: 'currency',
   currency: 'NOK',
   maximumFractionDigits: 0,
+})
+const dateTimeFormatter = new Intl.DateTimeFormat('nb-NO', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'Europe/Oslo',
+})
+const timeFormatter = new Intl.DateTimeFormat('nb-NO', {
+  hour: '2-digit',
+  minute: '2-digit',
+  timeZone: 'Europe/Oslo',
 })
 
 type CatalogueFilter = 'all' | 'high-protein' | 'under-600'
@@ -52,6 +70,11 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
     null,
   )
   const [selectedPickupId, setSelectedPickupId] = useState('')
+  const [orders, setOrders] = useState<OrderSummary[] | null>(null)
+  const [ordersError, setOrdersError] = useState<string | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null)
+  const [orderDetailError, setOrderDetailError] = useState<string | null>(null)
+  const [isCheckingOut, setIsCheckingOut] = useState(false)
 
   const handleAccessTokenChange = useCallback((nextAccessToken: string | null) => {
     setAccessToken(nextAccessToken)
@@ -59,6 +82,10 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
     setCartError(null)
     setPickupLocations(null)
     setSelectedPickupId('')
+    setOrders(null)
+    setOrdersError(null)
+    setSelectedOrder(null)
+    setOrderDetailError(null)
   }, [])
 
   useEffect(() => {
@@ -119,6 +146,14 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
       .catch((reason: unknown) => {
         if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
           setCartError('We could not load the pickup locations. Please try again.')
+        }
+      })
+
+    void fetchOrders(accessToken, controller.signal)
+      .then(setOrders)
+      .catch((reason: unknown) => {
+        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+          setOrdersError('We could not load your order history. Please try again.')
         }
       })
 
@@ -216,6 +251,57 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
     }
   }
 
+  async function checkout() {
+    if (!accessToken || !cart || !selectedPickupId) {
+      return
+    }
+    const location = pickupLocations?.find(
+      (candidate) => candidate.id === selectedPickupId,
+    )
+    if (!location) {
+      setCartError('Choose an active pickup location before checkout.')
+      return
+    }
+    const confirmed = window.confirm(
+      `Place this order for ${nokFormatter.format(Number(cart.total_nok))} with pickup at ${location.name}?`,
+    )
+    if (!confirmed) {
+      return
+    }
+
+    setIsCheckingOut(true)
+    setCartError(null)
+    try {
+      const order = await createOrder(accessToken, selectedPickupId)
+      setCart({ items: [], total_quantity: 0, total_nok: '0.00' })
+      setSelectedPickupId('')
+      setSelectedOrder(order)
+      setOrders(await fetchOrders(accessToken))
+      setOrderDetailError(null)
+    } catch (reason: unknown) {
+      setCartError(
+        reason instanceof OrderRequestError && reason.status === 409
+          ? reason.detail ?? 'The order could not be created from this cart.'
+          : 'Checkout failed. Your cart has not been changed.',
+      )
+    } finally {
+      setIsCheckingOut(false)
+    }
+  }
+
+  async function openOrder(orderId: string) {
+    if (!accessToken) {
+      return
+    }
+    setSelectedOrder(null)
+    setOrderDetailError(null)
+    try {
+      setSelectedOrder(await fetchOrder(accessToken, orderId))
+    } catch {
+      setOrderDetailError('We could not load that order. Please try again.')
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -243,9 +329,21 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
           mutationKey={cartMutationKey}
           pickupLocations={pickupLocations}
           selectedPickupId={selectedPickupId}
+          isCheckingOut={isCheckingOut}
           onPickupChange={setSelectedPickupId}
+          onCheckout={checkout}
           onQuantityChange={changeQuantity}
           onRemove={removeItem}
+        />
+      )}
+
+      {accessToken && (
+        <OrdersPanel
+          orders={orders}
+          error={ordersError}
+          selectedOrder={selectedOrder}
+          detailError={orderDetailError}
+          onOpenOrder={openOrder}
         />
       )}
 
@@ -492,7 +590,9 @@ interface CartPanelProps {
   mutationKey: string | null
   pickupLocations: PickupLocation[] | null
   selectedPickupId: string
+  isCheckingOut: boolean
   onPickupChange: (locationId: string) => void
+  onCheckout: () => Promise<void>
   onQuantityChange: (itemId: string, quantity: number) => Promise<void>
   onRemove: (itemId: string) => Promise<void>
 }
@@ -503,7 +603,9 @@ function CartPanel({
   mutationKey,
   pickupLocations,
   selectedPickupId,
+  isCheckingOut,
   onPickupChange,
+  onCheckout,
   onQuantityChange,
   onRemove,
 }: CartPanelProps) {
@@ -613,15 +715,142 @@ function CartPanel({
                 ))}
               </select>
             </label>
+            <button
+              className="checkout-button"
+              type="button"
+              disabled={
+                !selectedPickupId ||
+                isCheckingOut ||
+                cart.items.some((item) => !item.meal.available)
+              }
+              onClick={() => void onCheckout()}
+            >
+              {isCheckingOut ? 'Placing order…' : 'Review and place order'}
+            </button>
             <p className="checkout-note">
-              Your cart and quantities are saved to your account. Checkout is the
-              next step.
+              You will be asked to confirm before the order is created. Payment is
+              not part of this milestone.
             </p>
           </aside>
         </div>
       )}
     </section>
   )
+}
+
+interface OrdersPanelProps {
+  orders: OrderSummary[] | null
+  error: string | null
+  selectedOrder: OrderDetail | null
+  detailError: string | null
+  onOpenOrder: (orderId: string) => Promise<void>
+}
+
+function OrdersPanel({
+  orders,
+  error,
+  selectedOrder,
+  detailError,
+  onOpenOrder,
+}: OrdersPanelProps) {
+  return (
+    <section className="orders-panel" aria-labelledby="orders-heading">
+      <div className="orders-panel__heading">
+        <div>
+          <p className="eyebrow">Your account</p>
+          <h2 id="orders-heading">Order history</h2>
+        </div>
+      </div>
+
+      {!orders && !error && (
+        <div className="order-state" role="status">
+          Loading your orders…
+        </div>
+      )}
+      {error && (
+        <div className="order-state order-state--error" role="alert">
+          {error}
+        </div>
+      )}
+      {orders && orders.length === 0 && (
+        <div className="order-state">You have not placed any orders yet.</div>
+      )}
+
+      {orders && orders.length > 0 && (
+        <div className="order-list">
+          {orders.map((order) => (
+            <article className="order-card" key={order.id}>
+              <div>
+                <span className={`order-status order-status--${order.status}`}>
+                  {formatOrderStatus(order.status)}
+                </span>
+                <h3>{order.pickup_location_name}</h3>
+                <p>{formatPickupWindow(order)}</p>
+              </div>
+              <strong>{nokFormatter.format(Number(order.total_nok))}</strong>
+              <button type="button" onClick={() => void onOpenOrder(order.id)}>
+                View order
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {detailError && (
+        <div className="order-state order-state--error" role="alert">
+          {detailError}
+        </div>
+      )}
+      {selectedOrder && (
+        <article className="order-detail" aria-labelledby="order-detail-heading">
+          <div className="order-detail__heading">
+            <div>
+              <p className="eyebrow">Order details</p>
+              <h3 id="order-detail-heading">
+                {selectedOrder.pickup_location_name}
+              </h3>
+            </div>
+            <span
+              className={`order-status order-status--${selectedOrder.status}`}
+            >
+              {formatOrderStatus(selectedOrder.status)}
+            </span>
+          </div>
+          <p className="order-detail__pickup">
+            {selectedOrder.pickup_location_address}<br />
+            {formatPickupWindow(selectedOrder)}
+          </p>
+          <div className="order-detail__items">
+            {selectedOrder.items.map((item) => (
+              <div key={item.meal_id}>
+                <span>
+                  {item.quantity} × {item.meal_name}
+                </span>
+                <strong>{nokFormatter.format(Number(item.line_total_nok))}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="order-detail__total">
+            <span>Total</span>
+            <strong>{nokFormatter.format(Number(selectedOrder.total_nok))}</strong>
+          </div>
+        </article>
+      )}
+    </section>
+  )
+}
+
+function formatOrderStatus(status: OrderSummary['status']): string {
+  return status
+    .split('_')
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function formatPickupWindow(order: OrderSummary): string {
+  return `${dateTimeFormatter.format(new Date(order.pickup_start_at))}–${timeFormatter.format(
+    new Date(order.pickup_end_at),
+  )}`
 }
 
 function MealArtwork({ meal, detail = false }: { meal: Meal; detail?: boolean }) {

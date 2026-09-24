@@ -345,7 +345,7 @@ Display:
 
 ### T5.3 — Persistent shopping cart
 
-**Status:** In progress — implementation and production verification underway
+**Status:** Complete
 
 Implement:
 
@@ -366,7 +366,7 @@ Implement:
 
 ### T5.4 — Pickup selection
 
-**Status:** In progress — implementation and production verification underway
+**Status:** Complete
 
 **Acceptance criteria:**
 
@@ -377,6 +377,8 @@ Implement:
 ---
 
 ### T5.5 — Order creation
+
+**Status:** In progress — implementation and production verification underway
 
 Implement transactional checkout.
 
@@ -401,6 +403,8 @@ The backend must:
 ---
 
 ### T5.6 — Order history and details
+
+**Status:** In progress — implementation and production verification underway
 
 **Acceptance criteria:**
 

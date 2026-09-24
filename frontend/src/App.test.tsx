@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from './App'
@@ -45,6 +45,7 @@ const pickupLocation = {
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('App', () => {
@@ -194,6 +195,9 @@ describe('App', () => {
       if (path === '/api/cart' && !init?.method) {
         return { ok: true, json: async () => cartResponse() }
       }
+      if (path === '/api/orders' && !init?.method) {
+        return { ok: true, json: async () => [] }
+      }
       if (path === '/api/cart/items' && init?.method === 'POST') {
         quantity += 1
         return { ok: true, json: async () => cartResponse() }
@@ -246,5 +250,106 @@ describe('App', () => {
         }),
       }),
     )
+  })
+
+  it('requires confirmation, creates an order, and shows owned order details', async () => {
+    const order = {
+      id: '516835d2-bf33-4f39-803c-2e8f32c0873e',
+      status: 'received',
+      total_nok: '129.00',
+      created_at: '2026-09-24T10:00:00Z',
+      pickup_start_at: '2026-09-25T14:00:00Z',
+      pickup_end_at: '2026-09-25T16:00:00Z',
+      pickup_location_name: pickupLocation.name,
+      pickup_location_address: `${pickupLocation.address_line}, ${pickupLocation.postal_code} ${pickupLocation.city}`,
+      items: [
+        {
+          meal_id: meal.id,
+          meal_name: meal.name,
+          quantity: 1,
+          unit_price_nok: meal.price_nok,
+          line_total_nok: meal.price_nok,
+        },
+      ],
+    }
+    let orderCreated = false
+    const cart = {
+      items: [
+        {
+          id: 'c1c49342-a18f-4fd8-a555-e657577cc9db',
+          quantity: 1,
+          line_total_nok: meal.price_nok,
+          meal: { ...meal, available: true },
+        },
+      ],
+      total_quantity: 1,
+      total_nok: meal.price_nok,
+    }
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = input.toString()
+      if (path === '/api/meals') {
+        return { ok: true, json: async () => [meal] }
+      }
+      if (path === '/api/cart') {
+        return { ok: true, json: async () => cart }
+      }
+      if (path === '/api/pickup-locations') {
+        return { ok: true, json: async () => [pickupLocation] }
+      }
+      if (path === '/api/orders' && init?.method === 'POST') {
+        orderCreated = true
+        return { ok: true, json: async () => order }
+      }
+      if (path === '/api/orders' && !init?.method) {
+        return {
+          ok: true,
+          json: async () => (orderCreated ? [{ ...order, items: undefined }] : []),
+        }
+      }
+      if (path === `/api/orders/${order.id}`) {
+        return { ok: true, json: async () => order }
+      }
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true)
+
+    render(
+      <App
+        apiScope="api://prepwise/access_as_user"
+        initialAccessToken="test-access-token"
+      />,
+    )
+
+    await screen.findByText('1 meal')
+    fireEvent.change(
+      screen.getByRole('combobox', { name: 'Pickup location' }),
+      { target: { value: pickupLocation.id } },
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Review and place order' }),
+    )
+
+    expect(confirm).toHaveBeenCalledOnce()
+    expect(await screen.findByText(/Your cart is empty/)).toBeInTheDocument()
+    expect(await screen.findByText(`1 × ${meal.name}`)).toBeInTheDocument()
+    expect(screen.getAllByText('Received')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: 'View order' }))
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        `/api/orders/${order.id}`,
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-access-token',
+          }),
+        }),
+      )
+    })
+    expect(
+      screen.getByText((_, element) =>
+        Boolean(element?.classList.contains('order-detail__pickup')),
+      ),
+    ).toHaveTextContent(order.pickup_location_address)
   })
 })

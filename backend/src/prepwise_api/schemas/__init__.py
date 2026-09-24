@@ -5,7 +5,12 @@ from prepwise_api.schemas.cart import (
     CartMealResponse,
     CartResponse,
 )
-from prepwise_api.schemas.meal import AllergenResponse, MealDetailResponse, MealResponse
+from prepwise_api.schemas.meal import (
+    AllergenResponse,
+    MealAdminWrite,
+    MealDetailResponse,
+    MealResponse,
+)
 from prepwise_api.schemas.order import (
     OrderCreate,
     OrderDetailResponse,
@@ -24,6 +29,7 @@ __all__ = [
     "CartResponse",
     "CurrentUserResponse",
     "MealDetailResponse",
+    "MealAdminWrite",
     "MealResponse",
     "OrderCreate",
     "OrderDetailResponse",

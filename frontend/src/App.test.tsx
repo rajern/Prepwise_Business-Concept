@@ -46,6 +46,7 @@ afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  window.history.replaceState({}, '', '/')
 })
 
 describe('App', () => {
@@ -351,5 +352,28 @@ describe('App', () => {
         Boolean(element?.classList.contains('order-detail__pickup')),
       ),
     ).toHaveTextContent(order.pickup_location_address)
+  })
+
+  it('does not expose usable admin tools to a customer account', () => {
+    window.history.replaceState({}, '', '/admin')
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <App
+        apiScope="api://prepwise/access_as_user"
+        initialAccessToken="customer-token"
+        initialCurrentUser={{
+          id: 'customer-id',
+          email: 'customer@example.com',
+          display_name: 'Customer',
+          role: 'customer',
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('heading', { name: 'Access denied' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'New meal' })).not.toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

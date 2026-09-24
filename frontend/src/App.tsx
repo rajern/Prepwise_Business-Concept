@@ -27,6 +27,8 @@ import {
   OrderRequestError,
   type OrderSummary,
 } from './api/orders'
+import type { CurrentUser } from './api/me'
+import { AdminPage } from './admin/AdminPage'
 import { AuthControls } from './auth/AuthControls'
 
 const nokFormatter = new Intl.NumberFormat('nb-NO', {
@@ -50,9 +52,15 @@ type CatalogueFilter = 'all' | 'high-protein' | 'under-600'
 interface AppProps {
   apiScope: string
   initialAccessToken?: string | null
+  initialCurrentUser?: CurrentUser | null
 }
 
-export function App({ apiScope, initialAccessToken = null }: AppProps) {
+export function App({
+  apiScope,
+  initialAccessToken = null,
+  initialCurrentUser = null,
+}: AppProps) {
+  const isAdminRoute = window.location.pathname.startsWith('/admin')
   const [meals, setMeals] = useState<Meal[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [requestNumber, setRequestNumber] = useState(0)
@@ -75,6 +83,9 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null)
   const [orderDetailError, setOrderDetailError] = useState<string | null>(null)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(
+    initialCurrentUser,
+  )
 
   const handleAccessTokenChange = useCallback((nextAccessToken: string | null) => {
     setAccessToken(nextAccessToken)
@@ -86,9 +97,15 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
     setOrdersError(null)
     setSelectedOrder(null)
     setOrderDetailError(null)
+    if (!nextAccessToken) {
+      setCurrentUser(null)
+    }
   }, [])
 
   useEffect(() => {
+    if (isAdminRoute) {
+      return
+    }
     const controller = new AbortController()
 
     void fetchMeals(controller.signal)
@@ -101,7 +118,7 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
       })
 
     return () => controller.abort()
-  }, [requestNumber])
+  }, [isAdminRoute, requestNumber])
 
   useEffect(() => {
     if (!selectedMealId) {
@@ -127,7 +144,7 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
   }, [selectedMealId])
 
   useEffect(() => {
-    if (!accessToken) {
+    if (!accessToken || isAdminRoute) {
       return
     }
 
@@ -158,7 +175,7 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
       })
 
     return () => controller.abort()
-  }, [accessToken])
+  }, [accessToken, isAdminRoute])
 
   const filteredMeals = useMemo(() => {
     if (!meals) {
@@ -305,14 +322,25 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="/" aria-label="Prepwise home">
-          Prepwise
-        </a>
+        <div className="site-navigation">
+          <a className="brand" href="/" aria-label="Prepwise home">
+            Prepwise
+          </a>
+          <nav aria-label="Primary navigation">
+            <a href="/">Meals</a>
+            {currentUser?.role === 'admin' && <a href="/admin">Admin</a>}
+          </nav>
+        </div>
         <AuthControls
           apiScope={apiScope}
           onAccessTokenChange={handleAccessTokenChange}
+          onCurrentUserChange={setCurrentUser}
         />
       </header>
+      {isAdminRoute ? (
+        <AdminRoute accessToken={accessToken} currentUser={currentUser} />
+      ) : (
+        <>
       <section className="hero">
         <p className="eyebrow">Pickup meals in Oslo</p>
         <h1>Ready meals, without the guesswork.</h1>
@@ -443,8 +471,41 @@ export function App({ apiScope, initialAccessToken = null }: AppProps) {
           </div>
         )}
       </section>
+        </>
+      )}
     </main>
   )
+}
+
+function AdminRoute({
+  accessToken,
+  currentUser,
+}: {
+  accessToken: string | null
+  currentUser: CurrentUser | null
+}) {
+  if (!accessToken || !currentUser) {
+    return (
+      <section className="admin-access" aria-labelledby="admin-access-heading">
+        <p className="eyebrow">Protected workspace</p>
+        <h1 id="admin-access-heading">Admin access</h1>
+        <p>Sign in with an admin account to continue.</p>
+      </section>
+    )
+  }
+
+  if (currentUser.role !== 'admin') {
+    return (
+      <section className="admin-access" aria-labelledby="admin-access-heading">
+        <p className="eyebrow">Protected workspace</p>
+        <h1 id="admin-access-heading">Access denied</h1>
+        <p role="alert">Your account does not have permission to use admin tools.</p>
+        <a href="/">Return to the meal catalogue</a>
+      </section>
+    )
+  }
+
+  return <AdminPage accessToken={accessToken} />
 }
 
 interface MealCardProps {

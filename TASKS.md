@@ -378,7 +378,7 @@ Implement:
 
 ### T5.5 — Order creation
 
-**Status:** In progress — implementation and production verification underway
+**Status:** Complete — production verified
 
 Implement transactional checkout.
 
@@ -404,7 +404,7 @@ The backend must:
 
 ### T5.6 — Order history and details
 
-**Status:** In progress — implementation and production verification underway
+**Status:** Complete — production verified
 
 **Acceptance criteria:**
 
@@ -418,6 +418,8 @@ The backend must:
 
 ### T6.1 — Admin shell
 
+**Status:** In progress — implemented and awaiting production verification
+
 Create protected `/admin` routes and simple navigation.
 
 **Acceptance criteria:**
@@ -429,6 +431,8 @@ Create protected `/admin` routes and simple navigation.
 ---
 
 ### T6.2 — Meal administration
+
+**Status:** In progress — implemented and awaiting production verification
 
 Allow admin to:
 

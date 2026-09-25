@@ -24,6 +24,10 @@ _SAFE_EXTRA_FIELDS = (
     "total_nok",
     "from_status",
     "to_status",
+    "model",
+    "provider_request_id",
+    "input_tokens",
+    "output_tokens",
 )
 
 

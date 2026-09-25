@@ -27,6 +27,7 @@ import {
 } from './api/orders'
 import type { CurrentUser } from './api/me'
 import { AdminPage } from './admin/AdminPage'
+import { AssistantPanel } from './assistant/AssistantPanel'
 import { AuthControls } from './auth/AuthControls'
 
 const nokFormatter = new Intl.NumberFormat('nb-NO', {
@@ -383,6 +384,8 @@ export function App({
           convenient location in Oslo.
         </p>
       </section>
+
+      {accessToken && <AssistantPanel accessToken={accessToken} />}
 
       {accessToken && (
         <CartPanel

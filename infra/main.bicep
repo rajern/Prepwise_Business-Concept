@@ -49,6 +49,28 @@ param alertEmailAddress string = ''
 @description('Name of the existing Key Vault secret containing the production runtime database URL.')
 param databaseSecretName string = 'database-url'
 
+@description('Name of the existing Key Vault secret containing the OpenAI API key.')
+param openAiSecretName string = 'openai-api-key'
+
+@description('OpenAI Responses API model used by the customer assistant.')
+param openAiModel string = 'gpt-5.6-terra'
+
+@description('Reasoning effort used for assistant model calls.')
+@allowed([
+  'none'
+  'low'
+  'medium'
+  'high'
+  'xhigh'
+  'max'
+])
+param openAiReasoningEffort string = 'low'
+
+@description('OpenAI request timeout in seconds.')
+@minValue(1)
+@maxValue(120)
+param openAiTimeoutSeconds int = 30
+
 @description('Additional tags applied to every resource.')
 param tags object = {}
 
@@ -101,6 +123,10 @@ module backend './modules/backend-hosting.bicep' = {
     keyVaultName: secrets.outputs.name
     keyVaultUri: secrets.outputs.uri
     databaseSecretName: databaseSecretName
+    openAiSecretName: openAiSecretName
+    openAiModel: openAiModel
+    openAiReasoningEffort: openAiReasoningEffort
+    openAiTimeoutSeconds: openAiTimeoutSeconds
     entraTenantId: entraTenantId
     entraTenantSubdomain: entraTenantSubdomain
     entraApiClientId: entraApiClientId

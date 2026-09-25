@@ -13,7 +13,7 @@ The production parameter file creates:
 * one Azure Container Apps environment and externally reachable Container App
 * one user-assigned managed identity for the Container App
 * one RBAC-enabled Azure Key Vault whose secret values remain manually managed
-* one secret-scoped Key Vault role assignment for the runtime identity
+* secret-scoped Key Vault role assignments for the runtime identity
 * one Log Analytics workspace with a low daily ingestion cap
 * one workspace-based Application Insights resource
 * one three-region availability test for backend readiness
@@ -48,7 +48,8 @@ Do not recreate template-owned Azure resources manually. The existing Key Vault 
 resources and GitHub OIDC trust are intentional external prerequisites documented below and in
 [`NEON.md`](./NEON.md).
 
-The deployment creates an RBAC role assignment on the existing `database-url` secret. The Azure
+The deployment creates RBAC role assignments on the existing `database-url` and `openai-api-key`
+secrets. The Azure
 principal running this infrastructure deployment therefore needs
 `Microsoft.Authorization/roleAssignments/write` at that scope. `Contributor` alone is not
 sufficient. The current `gh-prepwise-prod` app registration is intentionally not used to apply
@@ -86,7 +87,7 @@ See [`../docs/OBSERVABILITY.md`](../docs/OBSERVABILITY.md) for telemetry, metric
 The following values are created or configured outside Bicep:
 
 * Neon production PostgreSQL with separate runtime and migration/owner roles
-* Key Vault secrets `database-url` and `database-migration-url`
+* Key Vault secrets `database-url`, `database-migration-url` and `openai-api-key`
 * GitHub Environment `production`
 * App registration `gh-prepwise-prod` with an OIDC federated credential for
   `rajern/Prepwise-Business-Concept` and environment `production`
@@ -116,8 +117,9 @@ anonymous image access before changing production.
 
 Environment-specific, non-secret values belong in `.bicepparam` files. Secrets must not be added
 to Bicep files, parameter files, deployment commands or outputs. The Container App receives
-`DATABASE_URL` through a Key Vault reference authenticated by its user-assigned identity. That
-identity has `Key Vault Secrets User` only at the `database-url` secret scope and cannot read the
-migration credential.
+`DATABASE_URL` and `OPENAI_API_KEY` through Key Vault references authenticated by its user-assigned
+identity. That identity has `Key Vault Secrets User` only at those two runtime secret scopes and
+cannot read the migration credential. The model, reasoning effort and timeout are non-secret
+environment settings managed by Bicep and the deployment workflow.
 
 Neon is explicitly outside this Bicep deployment. See [`NEON.md`](./NEON.md) for that boundary.

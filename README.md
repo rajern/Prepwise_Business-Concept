@@ -83,6 +83,11 @@ Planned capabilities include:
 * AI tracing and observability
 * safeguards around state-changing actions
 
+T9.1 provides the first authenticated, single-turn Responses API integration. The local backend
+reads `OPENAI_API_KEY` from the ignored root `.env`; production reads `openai-api-key` from Azure
+Key Vault through the Container App managed identity. Model and reasoning settings remain
+environment-configurable.
+
 Structured application data remains accessed through controlled backend tools rather than direct model access to the database.
 
 MCP and multi-agent architecture are intentionally excluded unless a real architectural need appears.

@@ -28,6 +28,8 @@ from prepwise_api.schemas.pickup import (
 from prepwise_api.schemas.user import CurrentUserResponse
 
 __all__ = [
+    "AssistantMessageRequest",
+    "AssistantMessageResponse",
     "AllergenResponse",
     "AdminOrderDetailResponse",
     "AdminOrderSummaryResponse",
@@ -49,3 +51,4 @@ __all__ = [
     "PickupLocationAdminWrite",
     "PickupLocationResponse",
 ]
+from prepwise_api.schemas.assistant import AssistantMessageRequest, AssistantMessageResponse

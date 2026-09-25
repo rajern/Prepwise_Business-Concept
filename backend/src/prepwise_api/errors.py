@@ -24,6 +24,7 @@ _ERROR_CODES = {
     409: "conflict",
     422: "validation_error",
     503: "service_unavailable",
+    504: "gateway_timeout",
 }
 
 

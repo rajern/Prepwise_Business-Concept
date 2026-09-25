@@ -163,6 +163,113 @@ h1 {
   padding-top: 2.5rem;
 }
 
+.assistant-panel {
+  margin-bottom: 4rem;
+  border: 1px solid #aebfaf;
+  border-radius: 1.25rem;
+  background: #f9fcf7;
+  padding: clamp(1.25rem, 3vw, 2rem);
+  box-shadow: 0 1.5rem 4rem rgb(39 63 43 / 8%);
+}
+
+.assistant-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.assistant-panel__heading h2 {
+  margin-bottom: 0;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  letter-spacing: -0.04em;
+}
+
+.assistant-panel__status {
+  border-radius: 999px;
+  background: #e7f1e5;
+  padding: 0.45rem 0.75rem;
+  color: #35633c;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.assistant-panel__intro {
+  max-width: 44rem;
+  margin: 1rem 0;
+  color: #5c665e;
+  line-height: 1.55;
+}
+
+.assistant-response,
+.assistant-error {
+  margin-bottom: 1rem;
+  border-radius: 0.85rem;
+  padding: 1rem;
+}
+
+.assistant-response {
+  background: #fff;
+}
+
+.assistant-response span,
+.assistant-form label {
+  color: #46724e;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.assistant-response p {
+  margin: 0.45rem 0 0;
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.assistant-error {
+  background: #fff1ee;
+  color: #8c3327;
+}
+
+.assistant-form {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.assistant-form textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #bfc9bc;
+  border-radius: 0.7rem;
+  outline: none;
+  background: #fff;
+  padding: 0.75rem 0.8rem;
+  color: #263229;
+  font: inherit;
+}
+
+.assistant-form textarea:focus {
+  border-color: #46724e;
+  box-shadow: 0 0 0 3px rgb(70 114 78 / 15%);
+}
+
+.assistant-form button {
+  justify-self: start;
+  border: 1px solid #294c32;
+  border-radius: 999px;
+  background: #294c32;
+  padding: 0.7rem 1rem;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.assistant-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .cart-panel {
   margin-bottom: 4rem;
   border: 1px solid #b8c7b5;

@@ -15,6 +15,10 @@ param entraApiScope = 'access_as_user'
 
 param logDailyQuotaGb = '0.1'
 param databaseSecretName = 'database-url'
+param openAiSecretName = 'openai-api-key'
+param openAiModel = 'gpt-5.6-terra'
+param openAiReasoningEffort = 'low'
+param openAiTimeoutSeconds = 30
 param tags = {
   project: 'Prepwise-Business-Concept'
   purpose: 'portfolio'

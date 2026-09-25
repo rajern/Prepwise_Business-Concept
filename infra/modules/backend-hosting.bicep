@@ -12,6 +12,10 @@ param alertEmailAddress string
 param keyVaultName string
 param keyVaultUri string
 param databaseSecretName string
+param openAiSecretName string
+param openAiModel string
+param openAiReasoningEffort string
+param openAiTimeoutSeconds int
 param entraTenantId string
 param entraTenantSubdomain string
 param entraApiClientId string
@@ -32,6 +36,11 @@ resource databaseSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' existing 
   name: databaseSecretName
 }
 
+resource openAiSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' existing = {
+  parent: keyVault
+  name: openAiSecretName
+}
+
 resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: 'id-${namePrefix}-api'
   location: location
@@ -41,6 +50,16 @@ resource managedIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-
 resource databaseSecretAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   name: guid(databaseSecret.id, managedIdentity.id, keyVaultSecretsUserRoleId)
   scope: databaseSecret
+  properties: {
+    principalId: managedIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: keyVaultSecretsUserRoleId
+  }
+}
+
+resource openAiSecretAccess 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(openAiSecret.id, managedIdentity.id, keyVaultSecretsUserRoleId)
+  scope: openAiSecret
   properties: {
     principalId: managedIdentity.properties.principalId
     principalType: 'ServicePrincipal'
@@ -113,6 +132,11 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
           keyVaultUrl: '${keyVaultUri}secrets/${databaseSecretName}'
           identity: managedIdentity.id
         }
+        {
+          name: openAiSecretName
+          keyVaultUrl: '${keyVaultUri}secrets/${openAiSecretName}'
+          identity: managedIdentity.id
+        }
       ]
       ingress: {
         allowInsecure: false
@@ -148,6 +172,22 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
             {
               name: 'DATABASE_URL'
               secretRef: databaseSecretName
+            }
+            {
+              name: 'OPENAI_API_KEY'
+              secretRef: openAiSecretName
+            }
+            {
+              name: 'OPENAI_MODEL'
+              value: openAiModel
+            }
+            {
+              name: 'OPENAI_REASONING_EFFORT'
+              value: openAiReasoningEffort
+            }
+            {
+              name: 'OPENAI_TIMEOUT_SECONDS'
+              value: string(openAiTimeoutSeconds)
             }
             {
               name: 'ENTRA_TENANT_ID'
@@ -222,7 +262,7 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
       }
     }
   }
-  dependsOn: [databaseSecretAccess]
+  dependsOn: [databaseSecretAccess, openAiSecretAccess]
 }
 
 resource alertActionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {

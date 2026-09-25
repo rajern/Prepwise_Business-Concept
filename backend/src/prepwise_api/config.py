@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,7 +9,7 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -24,6 +25,12 @@ class Settings(BaseSettings):
     entra_tenant_subdomain: str = "prepwisecustomers"
     entra_api_client_id: str = "82773ea0-fcf3-4874-81c3-3cd0da7d00c7"
     entra_api_scope: str = "access_as_user"
+    openai_api_key: SecretStr | None = None
+    openai_model: str = "gpt-5.6-terra"
+    openai_reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] = "low"
+    openai_embedding_model: str = "text-embedding-3-small"
+    openai_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    openai_max_retries: int = Field(default=1, ge=0, le=3)
 
     @property
     def cors_origins(self) -> list[str]:

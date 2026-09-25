@@ -51,11 +51,13 @@ def test_seed_preserves_ingredient_order() -> None:
 
     with Session(engine) as session:
         meal_id = session.scalar(select(Meal.id).where(Meal.name == MEALS[0].name))
-        positions = session.scalars(
-            select(meal_ingredients.c.position)
-            .where(meal_ingredients.c.meal_id == meal_id)
-            .order_by(meal_ingredients.c.position)
-        ).all()
+        positions: list[int] = list(
+            session.scalars(
+                select(meal_ingredients.c.position)
+                .where(meal_ingredients.c.meal_id == meal_id)
+                .order_by(meal_ingredients.c.position)
+            ).all()
+        )
 
     assert positions == list(range(len(MEALS[0].ingredients)))
     engine.dispose()

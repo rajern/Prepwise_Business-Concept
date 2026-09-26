@@ -798,6 +798,8 @@ Possible flow:
 
 ### T11.2 — Add side-effect controls
 
+**Status:** Complete — production verified
+
 Classify tools as read or write operations.
 
 **Acceptance criteria:**

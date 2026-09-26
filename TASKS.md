@@ -778,6 +778,8 @@ Prefer PostgreSQL + `pgvector` if it meets the requirements.
 
 ### T11.1 — Implement controlled multi-step workflow
 
+**Status:** Complete — production verified
+
 Support tasks such as:
 
 > Find five meals with at least 40 g protein and under 800 kcal and add them to my cart.

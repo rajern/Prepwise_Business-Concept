@@ -714,6 +714,8 @@ Expose controlled application capabilities such as:
 
 ### T9.3 — Implement tool-calling assistant
 
+**Status:** Complete — production verified
+
 Support questions such as:
 
 > Find meals with at least 40 g protein and below 800 kcal.
@@ -730,6 +732,8 @@ Support questions such as:
 ## 10. RAG
 
 ### T10.1 — Create knowledge base
+
+**Status:** Complete
 
 Add a small set of unstructured documents covering areas such as:
 

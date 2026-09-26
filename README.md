@@ -97,6 +97,11 @@ T9.3 connects that registry to a bounded Responses API tool loop. The assistant 
 application data before answering, passes structured tool results back to the model, and is
 instructed to preserve exact values and never invent unavailable meals or successful actions.
 
+T10.1 adds the curated Markdown service knowledge base under `docs/knowledge-base`. T10.2 indexes
+semantic, source-aware chunks in PostgreSQL with pgvector and configurable OpenAI embeddings.
+Indexing is idempotent, and retrieval can be evaluated independently before it is connected to the
+assistant.
+
 MCP and multi-agent architecture are intentionally excluded unless a real architectural need appears.
 
 ## Development approach
@@ -187,6 +192,13 @@ docker compose down
 ```
 
 Copy `.env.example` to `.env` to override local defaults; never commit `.env`.
+
+Synchronise and query the knowledge index after applying migrations:
+
+```powershell
+prepwise-index-knowledge --documents docs/knowledge-base
+prepwise-retrieve-knowledge "How should I reheat a meal?"
+```
 
 ## Quality checks
 

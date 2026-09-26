@@ -8,6 +8,7 @@ EXPECTED_TABLES = {
     "allergens",
     "cart_items",
     "ingredients",
+    "knowledge_chunks",
     "meal_allergens",
     "meal_ingredients",
     "meals",

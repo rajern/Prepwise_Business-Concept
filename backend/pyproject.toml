@@ -13,6 +13,7 @@ dependencies = [
     "fastapi>=0.115,<1.0",
     "openai>=2.0,<3.0",
     "opentelemetry-instrumentation-sqlalchemy>=0.60b0,<1.0",
+    "pgvector>=0.4,<1.0",
     "psycopg[binary]>=3.2,<4.0",
     "pyjwt[crypto]>=2.10,<3.0",
     "pydantic-settings>=2.7,<3.0",
@@ -24,6 +25,8 @@ dependencies = [
 prepwise-seed = "prepwise_api.seed:main"
 prepwise-seed-if-empty = "prepwise_api.seed:main_if_empty"
 prepwise-set-user-role = "prepwise_api.user_roles:main"
+prepwise-index-knowledge = "prepwise_api.knowledge:main"
+prepwise-retrieve-knowledge = "prepwise_api.knowledge:retrieve_main"
 
 [project.optional-dependencies]
 dev = [

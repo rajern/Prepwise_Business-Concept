@@ -79,7 +79,7 @@ jobs:
           echo "::error::The GHCR package is not publicly pullable by Azure Container Apps."
           exit 1
 
-      - name: Apply Neon migrations and initialise an empty catalogue
+      - name: Apply Neon migrations, initialise catalogue and index knowledge
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
         run: |
@@ -103,6 +103,25 @@ jobs:
             --env DATABASE_URL="$database_url" \
             "$BACKEND_IMAGE" \
             prepwise-seed-if-empty
+          openai_api_key="$(az keyvault secret show \
+            --vault-name "$KEY_VAULT_NAME" \
+            --name openai-api-key \
+            --query value \
+            --output tsv)"
+          if [ -z "$openai_api_key" ]; then
+            echo "::error::openai-api-key is empty or unavailable."
+            exit 1
+          fi
+          echo "::add-mask::$openai_api_key"
+          docker run --rm \
+            --env APP_ENV=production \
+            --env DATABASE_URL="$database_url" \
+            --env OPENAI_API_KEY="$openai_api_key" \
+            --env OPENAI_EMBEDDING_MODEL=text-embedding-3-small \
+            --volume "$GITHUB_WORKSPACE/docs/knowledge-base:/knowledge-base:ro" \
+            "$BACKEND_IMAGE" \
+            prepwise-index-knowledge --documents /knowledge-base
+          unset openai_api_key
           unset database_url
 
       - name: Deploy backend to Azure Container Apps
@@ -128,6 +147,7 @@ jobs:
               "ENTRA_API_SCOPE=$ENTRA_API_DELEGATED_SCOPE" \
               "OPENAI_MODEL=gpt-5.6-terra" \
               "OPENAI_REASONING_EFFORT=low" \
+              "OPENAI_EMBEDDING_MODEL=text-embedding-3-small" \
               "OPENAI_TIMEOUT_SECONDS=30" \
             --output none
           az containerapp show \

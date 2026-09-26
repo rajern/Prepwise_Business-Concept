@@ -35,7 +35,7 @@ services:
       start_period: 5s
 
   db:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.6-pg16-trixie
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-prepwise}
       POSTGRES_USER: ${POSTGRES_USER:-prepwise}

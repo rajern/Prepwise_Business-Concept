@@ -9,6 +9,7 @@ from prepwise_api.models.catalog import (
     meal_ingredients,
 )
 from prepwise_api.models.enums import OrderStatus, UserRole
+from prepwise_api.models.knowledge import KnowledgeChunk
 from prepwise_api.models.order import Order, OrderItem
 from prepwise_api.models.user import User
 
@@ -17,6 +18,7 @@ __all__ = [
     "Base",
     "CartItem",
     "Ingredient",
+    "KnowledgeChunk",
     "Meal",
     "Order",
     "OrderItem",

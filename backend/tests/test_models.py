@@ -13,6 +13,7 @@ EXPECTED_TABLES = {
     "meal_ingredients",
     "meals",
     "order_items",
+    "order_confirmations",
     "orders",
     "pickup_locations",
     "users",

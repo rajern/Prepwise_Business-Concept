@@ -2,6 +2,7 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from prepwise_api.assistant_tools import AssistantToolOperation
 from prepwise_api.schemas.assistant_tools import AssistantToolError, AssistantToolResult
 
 _CART_WRITE_TOOLS = frozenset({"add_to_cart", "remove_from_cart"})
@@ -16,6 +17,7 @@ class AssistantWorkflowState:
     expected_failure_count: int = 0
     repeated_failure_count: int = 0
     forced_verification_count: int = 0
+    write_call_count: int = 0
     _failed_calls: set[str] = field(default_factory=set)
 
     @property
@@ -47,7 +49,11 @@ class AssistantWorkflowState:
         name: str,
         arguments: str | Mapping[str, object],
         output: str,
+        *,
+        operation: AssistantToolOperation = AssistantToolOperation.READ,
     ) -> None:
+        if operation is AssistantToolOperation.WRITE:
+            self.write_call_count += 1
         succeeded = _tool_result_succeeded(output)
         if not succeeded:
             self.expected_failure_count += 1

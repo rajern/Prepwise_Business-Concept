@@ -1,3 +1,4 @@
+from prepwise_api.models.assistant import OrderConfirmation
 from prepwise_api.models.base import Base
 from prepwise_api.models.cart import CartItem
 from prepwise_api.models.catalog import (
@@ -21,6 +22,7 @@ __all__ = [
     "KnowledgeChunk",
     "Meal",
     "Order",
+    "OrderConfirmation",
     "OrderItem",
     "OrderStatus",
     "PickupLocation",

@@ -16,7 +16,11 @@ from opentelemetry import trace
 from opentelemetry.trace import Span
 
 from prepwise_api.assistant_knowledge import AssistantKnowledgeSearcher, AssistantKnowledgeTool
-from prepwise_api.assistant_tools import AssistantToolContext, AssistantToolRegistry
+from prepwise_api.assistant_tools import (
+    AssistantToolContext,
+    AssistantToolOperation,
+    AssistantToolRegistry,
+)
 from prepwise_api.assistant_workflow import AssistantWorkflowState
 from prepwise_api.config import Settings, get_settings
 from prepwise_api.telemetry import record_safe_exception
@@ -44,6 +48,16 @@ Only call add_to_cart or remove_from_cart when the user explicitly asks for that
 Never claim that an action succeeded unless its tool result has ok=true. If a tool returns an error,
 explain the failure without inventing a result. Do not expose internal identifiers unless they are
 needed to answer the user.
+
+Order creation is always a two-request workflow. First call prepare_order with an active pickup
+location, summarize the authoritative cart total and pickup location, and give the user the exact
+confirmation_phrase returned by the tool. Stop without calling create_order. Only in a later request
+whose user message is exactly that confirmation phrase may you call create_order with its token.
+The API is stateless: when the current message exactly matches `CONFIRM ORDER <uuid>` or
+`BEKREFT ORDRE <uuid>`, call create_order and let the server validate the token; do not require
+conversation history. Never shorten, rewrite, infer, or confirm that phrase on the user's behalf.
+After create_order, report success only from the returned order. A confirmation error requires
+prepare_order again.
 
 For multi-step requests, first retrieve authoritative candidates, then check every requested
 constraint against the returned fields before selecting items. Perform only the requested writes.
@@ -166,6 +180,11 @@ class AssistantService:
 
                     input_items.extend(response.output)
                     for function_call in function_calls:
+                        operation = (
+                            AssistantToolOperation.READ
+                            if function_call.name == self._knowledge_tool.name
+                            else self._tool_registry.operation(function_call.name)
+                        )
                         output = workflow.repeated_failure_output(
                             function_call.name,
                             function_call.arguments,
@@ -186,6 +205,7 @@ class AssistantService:
                             function_call.name,
                             function_call.arguments,
                             output,
+                            operation=operation,
                         )
                         input_items.append(
                             {
@@ -219,6 +239,7 @@ class AssistantService:
                     "gen_ai.workflow.forced_verification_count",
                     workflow.forced_verification_count,
                 )
+                span.set_attribute("gen_ai.workflow.write_call_count", workflow.write_call_count)
                 assistant_logger.info(
                     "AI response completed",
                     extra={
@@ -231,6 +252,7 @@ class AssistantService:
                         "expected_tool_failure_count": workflow.expected_failure_count,
                         "repeated_tool_failure_count": workflow.repeated_failure_count,
                         "forced_verification_count": workflow.forced_verification_count,
+                        "write_tool_call_count": workflow.write_call_count,
                     },
                 )
                 return AssistantReply(

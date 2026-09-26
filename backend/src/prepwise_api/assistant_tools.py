@@ -3,6 +3,7 @@ import logging
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 from typing import cast
 
 from openai import pydantic_function_tool
@@ -15,8 +16,10 @@ from prepwise_api.schemas.assistant_tools import (
     AssistantToolError,
     AssistantToolResult,
     AssistantToolValidationIssue,
+    CreateOrderToolArguments,
     EmptyToolArguments,
     GetMealDetailsToolArguments,
+    PrepareOrderToolArguments,
     RemoveFromCartToolArguments,
     SearchMealsToolArguments,
 )
@@ -31,7 +34,11 @@ from prepwise_api.services.catalog import (
     get_meal_details,
     search_available_meals,
 )
-from prepwise_api.services.orders import list_user_orders
+from prepwise_api.services.orders import (
+    confirm_user_order,
+    list_user_orders,
+    prepare_user_order_confirmation,
+)
 from prepwise_api.services.pickup_locations import list_active_pickup_locations
 
 tool_logger = logging.getLogger("prepwise.ai.tools")
@@ -43,6 +50,96 @@ class AssistantToolContext:
 
     session: Session
     user: User
+    request_id: str = ""
+    message: str = ""
+
+
+class AssistantToolOperation(StrEnum):
+    READ = "read"
+    WRITE = "write"
+
+
+@dataclass(frozen=True, slots=True)
+class AssistantToolSpec:
+    name: str
+    description: str
+    arguments_model: type[BaseModel]
+    operation: AssistantToolOperation
+
+
+_TOOL_SPECS = (
+    AssistantToolSpec(
+        "search_meals",
+        (
+            "READ: Search currently available Prepwise meals by text, minimum protein, "
+            "maximum calories and maximum price."
+        ),
+        SearchMealsToolArguments,
+        AssistantToolOperation.READ,
+    ),
+    AssistantToolSpec(
+        "get_meal_details",
+        "READ: Get full details and current availability for one Prepwise meal by ID.",
+        GetMealDetailsToolArguments,
+        AssistantToolOperation.READ,
+    ),
+    AssistantToolSpec(
+        "get_cart",
+        "READ: Get the authenticated customer's current cart and authoritative totals.",
+        EmptyToolArguments,
+        AssistantToolOperation.READ,
+    ),
+    AssistantToolSpec(
+        "add_to_cart",
+        (
+            "WRITE: Add an available meal to the authenticated customer's cart. "
+            "This changes customer state; call only when the user explicitly asks."
+        ),
+        AddToCartToolArguments,
+        AssistantToolOperation.WRITE,
+    ),
+    AssistantToolSpec(
+        "remove_from_cart",
+        (
+            "WRITE: Remove an owned cart item from the authenticated customer's cart. "
+            "This changes customer state; call only when the user explicitly asks."
+        ),
+        RemoveFromCartToolArguments,
+        AssistantToolOperation.WRITE,
+    ),
+    AssistantToolSpec(
+        "get_user_orders",
+        "READ: List orders belonging only to the authenticated customer, newest first.",
+        EmptyToolArguments,
+        AssistantToolOperation.READ,
+    ),
+    AssistantToolSpec(
+        "get_pickup_locations",
+        "READ: List pickup locations that are currently active and selectable.",
+        EmptyToolArguments,
+        AssistantToolOperation.READ,
+    ),
+    AssistantToolSpec(
+        "prepare_order",
+        (
+            "WRITE: Validate the current cart and create a short-lived order confirmation. "
+            "This does not create an order. Return the exact confirmation phrase to the user "
+            "and stop; create_order is only permitted in a later user request."
+        ),
+        PrepareOrderToolArguments,
+        AssistantToolOperation.WRITE,
+    ),
+    AssistantToolSpec(
+        "create_order",
+        (
+            "WRITE: Create the final order and clear the cart. This has a meaningful side "
+            "effect and is accepted only when the current user message exactly matches the "
+            "server-issued confirmation phrase from a prior request."
+        ),
+        CreateOrderToolArguments,
+        AssistantToolOperation.WRITE,
+    ),
+)
 
 
 class AssistantToolRegistry:
@@ -50,45 +147,15 @@ class AssistantToolRegistry:
 
     def definitions(self) -> list[dict[str, object]]:
         return [
-            _tool_definition(
-                "search_meals",
-                (
-                    "Search currently available Prepwise meals by text, minimum protein, "
-                    "maximum calories and maximum price."
-                ),
-                SearchMealsToolArguments,
-            ),
-            _tool_definition(
-                "get_meal_details",
-                "Get full details and current availability for one Prepwise meal by ID.",
-                GetMealDetailsToolArguments,
-            ),
-            _tool_definition(
-                "get_cart",
-                "Get the authenticated customer's current cart and authoritative totals.",
-                EmptyToolArguments,
-            ),
-            _tool_definition(
-                "add_to_cart",
-                "Add an available meal to the authenticated customer's cart.",
-                AddToCartToolArguments,
-            ),
-            _tool_definition(
-                "remove_from_cart",
-                "Remove an owned cart item from the authenticated customer's cart.",
-                RemoveFromCartToolArguments,
-            ),
-            _tool_definition(
-                "get_user_orders",
-                "List orders belonging only to the authenticated customer, newest first.",
-                EmptyToolArguments,
-            ),
-            _tool_definition(
-                "get_pickup_locations",
-                "List pickup locations that are currently active and selectable.",
-                EmptyToolArguments,
-            ),
+            _tool_definition(spec.name, spec.description, spec.arguments_model)
+            for spec in _TOOL_SPECS
         ]
+
+    def operation(self, name: str) -> AssistantToolOperation:
+        for spec in _TOOL_SPECS:
+            if spec.name == name:
+                return spec.operation
+        raise InvalidToolArgumentsError(f"Unknown tool: {name}")
 
     def execute(
         self,
@@ -175,6 +242,28 @@ class AssistantToolRegistry:
         if name == "get_pickup_locations":
             EmptyToolArguments.model_validate(payload)
             return _model_list_json(list_active_pickup_locations(context.session))
+        if name == "prepare_order":
+            prepare_arguments = PrepareOrderToolArguments.model_validate(payload)
+            return cast(
+                JsonValue,
+                prepare_user_order_confirmation(
+                    context.session,
+                    context.user.id,
+                    prepare_arguments.pickup_location_id,
+                    context.request_id,
+                ),
+            )
+        if name == "create_order":
+            create_arguments = CreateOrderToolArguments.model_validate(payload)
+            return _model_json(
+                confirm_user_order(
+                    context.session,
+                    context.user.id,
+                    create_arguments.confirmation_token,
+                    context.request_id,
+                    context.message,
+                )
+            )
         raise InvalidToolArgumentsError(f"Unknown tool: {name}")
 
 

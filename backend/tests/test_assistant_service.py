@@ -130,7 +130,7 @@ def test_service_calls_responses_api_with_safe_configuration() -> None:
     assert call["input"] == [{"role": "user", "content": "Hello"}]
     assert call["tool_choice"] == "auto"
     assert call["parallel_tool_calls"] is False
-    assert len(list(call["tools"])) == 8
+    assert len(list(call["tools"])) == 10
     assert call["store"] is False
     assert call["extra_headers"] == {"X-Client-Request-Id": "request-123"}
     assert "Prepwise" in call["instructions"]
@@ -138,6 +138,7 @@ def test_service_calls_responses_api_with_safe_configuration() -> None:
     assert "explicitly asks" in call["instructions"]
     assert "call search_knowledge" in call["instructions"]
     assert "retrieved passages" in call["instructions"]
+    assert "two-request workflow" in call["instructions"]
 
 
 def test_service_executes_function_call_and_returns_grounded_follow_up() -> None:

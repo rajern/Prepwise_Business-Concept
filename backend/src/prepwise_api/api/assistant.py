@@ -33,7 +33,12 @@ async def create_assistant_message(
         reply = await assistant.respond(
             message=payload.message,
             request_id=request_id,
-            tool_context=AssistantToolContext(session=session, user=user),
+            tool_context=AssistantToolContext(
+                session=session,
+                user=user,
+                request_id=request_id,
+                message=payload.message,
+            ),
         )
     except AssistantConfigurationError as error:
         raise HTTPException(

@@ -9,6 +9,7 @@ from prepwise_api.models.base import Base, TimestampMixin, UuidPrimaryKeyMixin
 from prepwise_api.models.enums import UserRole
 
 if TYPE_CHECKING:
+    from prepwise_api.models.assistant import OrderConfirmation
     from prepwise_api.models.cart import CartItem
     from prepwise_api.models.order import Order
 
@@ -36,3 +37,7 @@ class User(UuidPrimaryKeyMixin, TimestampMixin, Base):
         passive_deletes=True,
     )
     orders: Mapped[list[Order]] = relationship(back_populates="user")
+    order_confirmations: Mapped[list[OrderConfirmation]] = relationship(
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

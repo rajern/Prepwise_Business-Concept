@@ -42,6 +42,14 @@ class RemoveFromCartToolArguments(AssistantToolArguments):
     cart_item_id: UUID
 
 
+class PrepareOrderToolArguments(AssistantToolArguments):
+    pickup_location_id: UUID
+
+
+class CreateOrderToolArguments(AssistantToolArguments):
+    confirmation_token: UUID
+
+
 class AssistantToolValidationIssue(BaseModel):
     field: str
     message: str

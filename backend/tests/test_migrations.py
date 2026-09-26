@@ -19,8 +19,8 @@ def test_migration_history_has_one_linear_head() -> None:
     assert len(heads) == 1
     head = scripts.get_revision(heads[0])
     assert head is not None
-    assert head.revision == "f7b7f40b50a1"
-    assert head.down_revision == "a24a50b792ac"
+    assert head.revision == "c3d4e5f6a7b8"
+    assert head.down_revision == "f7b7f40b50a1"
 
 
 def test_initial_migration_renders_postgresql_sql(
@@ -33,5 +33,6 @@ def test_initial_migration_renders_postgresql_sql(
     assert "CREATE TABLE orders" in sql
     assert "CREATE EXTENSION IF NOT EXISTS vector" in sql
     assert "CREATE TABLE knowledge_chunks" in sql
+    assert "CREATE TABLE order_confirmations" in sql
     assert "vector(1536)" in sql.lower()
     assert "CREATE TYPE user_role" in sql

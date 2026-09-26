@@ -676,6 +676,8 @@ At this point Prepwise is ready to be presented on CV and GitHub.
 
 ### T9.1 — Add model integration
 
+**Status:** Complete — production verified
+
 Create the backend foundation for the AI assistant.
 
 **Acceptance criteria:**

@@ -207,9 +207,7 @@ def _load_checkout_state(
     if lock:
         meal_query = meal_query.with_for_update()
     meals = {meal.id: meal for meal in session.scalars(meal_query)}
-    if len(meals) != len(meal_ids) or any(
-        not meals[item.meal_id].available for item in cart_items
-    ):
+    if len(meals) != len(meal_ids) or any(not meals[item.meal_id].available for item in cart_items):
         raise ApplicationConflictError("Cart contains an unavailable meal")
     return location, cart_items, meals
 

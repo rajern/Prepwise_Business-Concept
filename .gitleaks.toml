@@ -16,4 +16,5 @@ regexes = [
   '''prepwise-e2e-(?:admin|customer)''',
   '''(?:valid|other)-token''',
   '''52a8cd26-8b95-447b-aa0f-80efeb1aa218''',
+  '''f47ac10b-58cc-4372-a567-0e02b2c3d479''',
 ]

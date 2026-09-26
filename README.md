@@ -93,6 +93,10 @@ order history, and active pickup locations. Tools receive server-created user co
 same application services and validation as the HTTP API; the model never accesses PostgreSQL
 directly.
 
+T9.3 connects that registry to a bounded Responses API tool loop. The assistant retrieves live
+application data before answering, passes structured tool results back to the model, and is
+instructed to preserve exact values and never invent unavailable meals or successful actions.
+
 MCP and multi-agent architecture are intentionally excluded unless a real architectural need appears.
 
 ## Development approach
@@ -224,8 +228,9 @@ the step that needs them.
 
 ## Status
 
-**Milestone 1 complete. Milestone 2 not started.**
+**Milestone 1 complete. Milestone 2 in progress.**
 
 The complete non-AI product is implemented, tested and running in production. Customer and admin
 journeys, security controls, CI/CD, observability, alerting and production smoke tests have been
-verified. The next development phase is the AI application layer defined in `TASKS.md`.
+verified. The authenticated AI assistant and its initial application tools are now being added as
+defined in `TASKS.md`.

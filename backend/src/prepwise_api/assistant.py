@@ -1,12 +1,20 @@
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Protocol
+from typing import Protocol, cast
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI, RateLimitError
+from openai.types.responses import (
+    Response,
+    ResponseFunctionToolCall,
+    ResponseInputParam,
+    ToolParam,
+)
 from opentelemetry import trace
 from opentelemetry.trace import Span
 
+from prepwise_api.assistant_tools import AssistantToolContext, AssistantToolRegistry
 from prepwise_api.config import Settings, get_settings
 from prepwise_api.telemetry import record_safe_exception
 
@@ -14,10 +22,19 @@ assistant_logger = logging.getLogger("prepwise.ai")
 _tracer = trace.get_tracer("prepwise.ai")
 
 _ASSISTANT_INSTRUCTIONS = """You are the Prepwise customer assistant.
-Be concise, honest and helpful. You do not yet have access to the live meal catalogue, carts,
-orders or service knowledge. Never invent Prepwise-specific facts. If a request requires live
-application data or an action, explain that the capability is not available yet.
+Be concise, honest and helpful.
+
+For any question about current Prepwise meals, meal values, availability, cart contents, orders or
+pickup locations, use the provided tools. Treat tool output as the only authoritative source for
+that application data. Never invent, estimate or alter meal names, availability, prices, nutrition
+values, cart contents, orders or pickup locations. If a search returns no matches, say so plainly.
+
+Only call add_to_cart or remove_from_cart when the user explicitly asks for that exact state change.
+Never claim that an action succeeded unless its tool result has ok=true. If a tool returns an error,
+explain the failure without inventing a result. Do not expose internal identifiers unless they are
+needed to answer the user.
 """
+_MAX_TOOL_ROUNDS = 5
 
 
 class AssistantConfigurationError(Exception):
@@ -40,15 +57,27 @@ class AssistantReply:
 
 
 class AssistantResponder(Protocol):
-    async def respond(self, *, message: str, request_id: str) -> AssistantReply: ...
+    async def respond(
+        self,
+        *,
+        message: str,
+        request_id: str,
+        tool_context: AssistantToolContext,
+    ) -> AssistantReply: ...
 
 
 class AssistantService:
     """Call the OpenAI Responses API without recording customer content in telemetry."""
 
-    def __init__(self, settings: Settings, client: AsyncOpenAI | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        client: AsyncOpenAI | None = None,
+        tool_registry: AssistantToolRegistry | None = None,
+    ) -> None:
         self._settings = settings
         self._client = client
+        self._tool_registry = tool_registry or AssistantToolRegistry()
 
     def _resolve_client(self) -> AsyncOpenAI:
         if self._client is not None:
@@ -63,9 +92,17 @@ class AssistantService:
         )
         return self._client
 
-    async def respond(self, *, message: str, request_id: str) -> AssistantReply:
+    async def respond(
+        self,
+        *,
+        message: str,
+        request_id: str,
+        tool_context: AssistantToolContext,
+    ) -> AssistantReply:
         client = self._resolve_client()
         model = self._settings.openai_model
+        tools = cast(Iterable[ToolParam], self._tool_registry.definitions())
+        input_items: list[object] = [{"role": "user", "content": message}]
 
         try:
             with _tracer.start_as_current_span(
@@ -74,20 +111,52 @@ class AssistantService:
                 set_status_on_exception=False,
             ) as span:
                 _set_request_span_attributes(span, model, self._settings.openai_reasoning_effort)
-                response = await client.responses.create(
-                    model=model,
-                    reasoning={"effort": self._settings.openai_reasoning_effort},
-                    instructions=_ASSISTANT_INSTRUCTIONS,
-                    input=message,
-                    store=False,
-                    extra_headers={"X-Client-Request-Id": request_id},
-                )
+                response: Response | None = None
+                tool_call_count = 0
+                for _ in range(_MAX_TOOL_ROUNDS + 1):
+                    response = await client.responses.create(
+                        model=model,
+                        reasoning={"effort": self._settings.openai_reasoning_effort},
+                        instructions=_ASSISTANT_INSTRUCTIONS,
+                        input=cast(ResponseInputParam, input_items),
+                        tools=tools,
+                        tool_choice="auto",
+                        parallel_tool_calls=False,
+                        store=False,
+                        extra_headers={"X-Client-Request-Id": request_id},
+                    )
+                    function_calls = _function_calls(response)
+                    if not function_calls:
+                        break
+                    if tool_call_count + len(function_calls) > _MAX_TOOL_ROUNDS:
+                        raise AssistantUnavailableError
+
+                    input_items.extend(response.output)
+                    for function_call in function_calls:
+                        input_items.append(
+                            {
+                                "type": "function_call_output",
+                                "call_id": function_call.call_id,
+                                "output": self._tool_registry.execute_json(
+                                    function_call.name,
+                                    function_call.arguments,
+                                    tool_context,
+                                ),
+                            }
+                        )
+                    tool_call_count += len(function_calls)
+                else:
+                    raise AssistantUnavailableError
+
+                if response is None:
+                    raise AssistantUnavailableError
                 response_text = response.output_text.strip()
                 if not response_text:
                     raise AssistantUnavailableError
 
                 provider_request_id = getattr(response, "_request_id", None)
                 _set_response_span_attributes(span, response, provider_request_id)
+                span.set_attribute("gen_ai.tool.call_count", tool_call_count)
                 assistant_logger.info(
                     "AI response completed",
                     extra={
@@ -96,6 +165,7 @@ class AssistantService:
                         "provider_request_id": provider_request_id,
                         "input_tokens": response.usage.input_tokens if response.usage else None,
                         "output_tokens": response.usage.output_tokens if response.usage else None,
+                        "tool_call_count": tool_call_count,
                     },
                 )
                 return AssistantReply(
@@ -109,6 +179,10 @@ class AssistantService:
         except (APIConnectionError, RateLimitError, APIStatusError) as error:
             _record_failure(error, model, "ai.response.unavailable")
             raise AssistantUnavailableError from error
+
+
+def _function_calls(response: Response) -> list[ResponseFunctionToolCall]:
+    return [item for item in response.output if isinstance(item, ResponseFunctionToolCall)]
 
 
 def _set_request_span_attributes(span: Span, model: str, reasoning_effort: str) -> None:

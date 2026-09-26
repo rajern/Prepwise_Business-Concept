@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy.orm import Session
 
 from prepwise_api.assistant import (
     AssistantConfigurationError,
@@ -9,7 +10,9 @@ from prepwise_api.assistant import (
     AssistantUnavailableError,
     get_assistant_service,
 )
+from prepwise_api.assistant_tools import AssistantToolContext
 from prepwise_api.auth import get_current_user
+from prepwise_api.database import get_session
 from prepwise_api.models import User
 from prepwise_api.schemas import AssistantMessageRequest, AssistantMessageResponse
 
@@ -21,13 +24,17 @@ async def create_assistant_message(
     payload: AssistantMessageRequest,
     request: Request,
     user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
     assistant: Annotated[AssistantResponder, Depends(get_assistant_service)],
 ) -> AssistantMessageResponse:
     """Send one authenticated customer message to the configured model."""
-    del user
     request_id = str(request.state.request_id)
     try:
-        reply = await assistant.respond(message=payload.message, request_id=request_id)
+        reply = await assistant.respond(
+            message=payload.message,
+            request_id=request_id,
+            tool_context=AssistantToolContext(session=session, user=user),
+        )
     except AssistantConfigurationError as error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

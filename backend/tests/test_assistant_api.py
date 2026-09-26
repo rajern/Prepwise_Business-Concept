@@ -14,6 +14,7 @@ from prepwise_api.assistant import (
     AssistantUnavailableError,
     get_assistant_service,
 )
+from prepwise_api.assistant_tools import AssistantToolContext
 from prepwise_api.auth import (
     AccessTokenClaims,
     InvalidAccessTokenError,
@@ -40,10 +41,16 @@ class StubAccessTokenValidator:
 @dataclass
 class StubAssistantService:
     error: Exception | None = None
-    calls: list[tuple[str, str]] = field(default_factory=list)
+    calls: list[tuple[str, str, str]] = field(default_factory=list)
 
-    async def respond(self, *, message: str, request_id: str) -> AssistantReply:
-        self.calls.append((message, request_id))
+    async def respond(
+        self,
+        *,
+        message: str,
+        request_id: str,
+        tool_context: AssistantToolContext,
+    ) -> AssistantReply:
+        self.calls.append((message, request_id, tool_context.user.external_subject))
         if self.error is not None:
             raise self.error
         return AssistantReply(
@@ -109,7 +116,13 @@ def test_authenticated_customer_can_send_message(
         "model": "gpt-5.6-terra",
         "response_id": "resp_test",
     }
-    assert assistant.calls == [("Hello", "assistant-request-123")]
+    assert assistant.calls == [
+        (
+            "Hello",
+            "assistant-request-123",
+            "1a782388-bf90-4ea8-af8f-bcc755f5cd7e:assistant-customer",
+        )
+    ]
 
 
 def test_assistant_rejects_blank_message_before_model_call(

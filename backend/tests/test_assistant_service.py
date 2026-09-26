@@ -1,14 +1,63 @@
 import asyncio
+from collections.abc import Mapping
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
 
 import httpx
 from openai import APITimeoutError, AsyncOpenAI
+from openai.types.responses import ResponseFunctionToolCall
 from pydantic import SecretStr
+from sqlalchemy.orm import Session
 
-from prepwise_api.assistant import AssistantService, AssistantTimeoutError
+from prepwise_api.assistant import (
+    AssistantService,
+    AssistantTimeoutError,
+    AssistantUnavailableError,
+)
+from prepwise_api.assistant_tools import (
+    AssistantToolContext,
+    AssistantToolRegistry,
+)
 from prepwise_api.config import Settings
+from prepwise_api.models import User
+
+
+class RecordingToolRegistry(AssistantToolRegistry):
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, str]] = []
+
+    def definitions(self) -> list[dict[str, object]]:
+        return [
+            {
+                "type": "function",
+                "name": "search_meals",
+                "description": "Search meals",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                    "required": [],
+                    "additionalProperties": False,
+                },
+                "strict": True,
+            }
+        ]
+
+    def execute_json(
+        self,
+        name: str,
+        arguments: str | Mapping[str, object],
+        context: AssistantToolContext,
+    ) -> str:
+        self.calls.append((name, str(arguments), context.user.external_subject))
+        return '{"ok":true,"data":[{"name":"Protein Bowl","protein_grams":"45.00"}]}'
+
+
+def _tool_context() -> AssistantToolContext:
+    return AssistantToolContext(
+        session=cast(Session, object()),
+        user=User(external_subject="assistant-user", email="assistant@example.com"),
+    )
 
 
 def test_service_calls_responses_api_with_safe_configuration() -> None:
@@ -16,6 +65,7 @@ def test_service_calls_responses_api_with_safe_configuration() -> None:
         id="resp_123",
         model="gpt-5.6-terra",
         output_text="A concise answer.",
+        output=[],
         usage=SimpleNamespace(input_tokens=12, output_tokens=7),
         _request_id="req_123",
     )
@@ -28,7 +78,13 @@ def test_service_calls_responses_api_with_safe_configuration() -> None:
     )
     service = AssistantService(settings, cast(AsyncOpenAI, client))
 
-    reply = asyncio.run(service.respond(message="Hello", request_id="request-123"))
+    reply = asyncio.run(
+        service.respond(
+            message="Hello",
+            request_id="request-123",
+            tool_context=_tool_context(),
+        )
+    )
 
     assert reply.text == "A concise answer."
     assert reply.response_id == "resp_123"
@@ -37,10 +93,117 @@ def test_service_calls_responses_api_with_safe_configuration() -> None:
     call = create.await_args.kwargs
     assert call["model"] == "gpt-5.6-terra"
     assert call["reasoning"] == {"effort": "low"}
-    assert call["input"] == "Hello"
+    assert call["input"] == [{"role": "user", "content": "Hello"}]
+    assert call["tool_choice"] == "auto"
+    assert call["parallel_tool_calls"] is False
+    assert len(list(call["tools"])) == 7
     assert call["store"] is False
     assert call["extra_headers"] == {"X-Client-Request-Id": "request-123"}
     assert "Prepwise" in call["instructions"]
+    assert "only authoritative source" in call["instructions"]
+    assert "explicitly asks" in call["instructions"]
+
+
+def test_service_executes_function_call_and_returns_grounded_follow_up() -> None:
+    function_call = ResponseFunctionToolCall(
+        type="function_call",
+        name="search_meals",
+        arguments='{"min_protein_grams":40,"max_calories":800}',
+        call_id="call_123",
+    )
+    first_response = SimpleNamespace(
+        id="resp_tools",
+        model="gpt-5.6-terra",
+        output_text="",
+        output=[function_call],
+        usage=None,
+        _request_id="req_tools",
+    )
+    final_response = SimpleNamespace(
+        id="resp_final",
+        model="gpt-5.6-terra",
+        output_text="Protein Bowl has 45 g protein.",
+        output=[],
+        usage=SimpleNamespace(input_tokens=40, output_tokens=10),
+        _request_id="req_final",
+    )
+    create = AsyncMock(side_effect=[first_response, final_response])
+    client = SimpleNamespace(responses=SimpleNamespace(create=create))
+    registry = RecordingToolRegistry()
+    settings = Settings(openai_api_key=SecretStr("test-key"))
+    service = AssistantService(settings, cast(AsyncOpenAI, client), registry)
+
+    reply = asyncio.run(
+        service.respond(
+            message="Find meals with at least 40 g protein and below 800 kcal.",
+            request_id="request-123",
+            tool_context=_tool_context(),
+        )
+    )
+
+    assert reply.text == "Protein Bowl has 45 g protein."
+    assert registry.calls == [
+        (
+            "search_meals",
+            '{"min_protein_grams":40,"max_calories":800}',
+            "assistant-user",
+        )
+    ]
+    assert create.await_count == 2
+    second_call = create.await_args_list[1].kwargs
+    assert second_call["input"][0] == {
+        "role": "user",
+        "content": "Find meals with at least 40 g protein and below 800 kcal.",
+    }
+    assert second_call["input"][1] is function_call
+    assert second_call["input"][2] == {
+        "type": "function_call_output",
+        "call_id": "call_123",
+        "output": ('{"ok":true,"data":[{"name":"Protein Bowl","protein_grams":"45.00"}]}'),
+    }
+
+
+def test_service_stops_an_unbounded_tool_loop() -> None:
+    responses = [
+        SimpleNamespace(
+            id=f"resp_{index}",
+            model="gpt-5.6-terra",
+            output_text="",
+            output=[
+                ResponseFunctionToolCall(
+                    type="function_call",
+                    name="search_meals",
+                    arguments="{}",
+                    call_id=f"call_{index}",
+                )
+            ],
+            usage=None,
+            _request_id=f"req_{index}",
+        )
+        for index in range(6)
+    ]
+    create = AsyncMock(side_effect=responses)
+    client = SimpleNamespace(responses=SimpleNamespace(create=create))
+    service = AssistantService(
+        Settings(openai_api_key=SecretStr("test-key")),
+        cast(AsyncOpenAI, client),
+        RecordingToolRegistry(),
+    )
+
+    try:
+        asyncio.run(
+            service.respond(
+                message="Keep searching forever",
+                request_id="request-123",
+                tool_context=_tool_context(),
+            )
+        )
+    except AssistantUnavailableError:
+        pass
+    else:
+        raise AssertionError("Expected AssistantUnavailableError")
+
+    assert create.await_count == 6
 
 
 def test_service_maps_provider_timeout() -> None:
@@ -52,7 +215,13 @@ def test_service_maps_provider_timeout() -> None:
     service = AssistantService(settings, cast(AsyncOpenAI, client))
 
     try:
-        asyncio.run(service.respond(message="Hello", request_id="request-123"))
+        asyncio.run(
+            service.respond(
+                message="Hello",
+                request_id="request-123",
+                tool_context=_tool_context(),
+            )
+        )
     except AssistantTimeoutError:
         pass
     else:

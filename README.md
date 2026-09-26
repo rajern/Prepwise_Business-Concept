@@ -88,7 +88,10 @@ reads `OPENAI_API_KEY` from the ignored root `.env`; production reads `openai-ap
 Key Vault through the Container App managed identity. Model and reasoning settings remain
 environment-configurable.
 
-Structured application data remains accessed through controlled backend tools rather than direct model access to the database.
+T9.2 adds a strict, allow-listed tool registry for meal search/details, the authenticated cart and
+order history, and active pickup locations. Tools receive server-created user context and reuse the
+same application services and validation as the HTTP API; the model never accesses PostgreSQL
+directly.
 
 MCP and multi-agent architecture are intentionally excluded unless a real architectural need appears.
 

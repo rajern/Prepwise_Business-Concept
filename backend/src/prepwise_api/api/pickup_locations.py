@@ -1,13 +1,19 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from prepwise_api.api.service_errors import raise_service_http_error
 from prepwise_api.database import get_session
-from prepwise_api.models import PickupLocation
 from prepwise_api.schemas import PickupLocationResponse
+from prepwise_api.services import ApplicationServiceError
+from prepwise_api.services.pickup_locations import (
+    get_active_pickup_location as get_active_pickup_location_service,
+)
+from prepwise_api.services.pickup_locations import (
+    list_active_pickup_locations as list_active_pickup_locations_service,
+)
 
 router = APIRouter(prefix="/api/pickup-locations", tags=["pickup locations"])
 
@@ -17,10 +23,7 @@ def list_active_pickup_locations(
     session: Annotated[Session, Depends(get_session)],
 ) -> list[PickupLocationResponse]:
     """Return active pickup locations from PostgreSQL."""
-    locations = session.scalars(
-        select(PickupLocation).where(PickupLocation.active.is_(True)).order_by(PickupLocation.name)
-    ).all()
-    return [_pickup_response(location) for location in locations]
+    return list_active_pickup_locations_service(session)
 
 
 @router.get("/{location_id}", response_model=PickupLocationResponse)
@@ -29,25 +32,7 @@ def get_active_pickup_location(
     session: Annotated[Session, Depends(get_session)],
 ) -> PickupLocationResponse:
     """Resolve a selectable location and reject missing or inactive choices."""
-    location = session.scalar(
-        select(PickupLocation).where(
-            PickupLocation.id == location_id,
-            PickupLocation.active.is_(True),
-        )
-    )
-    if location is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Pickup location not found or inactive",
-        )
-    return _pickup_response(location)
-
-
-def _pickup_response(location: PickupLocation) -> PickupLocationResponse:
-    return PickupLocationResponse(
-        id=location.id,
-        name=location.name,
-        address_line=location.address_line,
-        postal_code=location.postal_code,
-        city=location.city,
-    )
+    try:
+        return get_active_pickup_location_service(session, location_id)
+    except ApplicationServiceError as error:
+        raise_service_http_error(error)

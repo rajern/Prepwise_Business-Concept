@@ -1,3 +1,12 @@
+from prepwise_api.schemas.assistant_tools import (
+    AddToCartToolArguments,
+    AssistantToolError,
+    AssistantToolResult,
+    EmptyToolArguments,
+    GetMealDetailsToolArguments,
+    RemoveFromCartToolArguments,
+    SearchMealsToolArguments,
+)
 from prepwise_api.schemas.cart import (
     CartItemCreate,
     CartItemQuantityUpdate,
@@ -30,6 +39,9 @@ from prepwise_api.schemas.user import CurrentUserResponse
 __all__ = [
     "AssistantMessageRequest",
     "AssistantMessageResponse",
+    "AddToCartToolArguments",
+    "AssistantToolError",
+    "AssistantToolResult",
     "AllergenResponse",
     "AdminOrderDetailResponse",
     "AdminOrderSummaryResponse",
@@ -39,6 +51,8 @@ __all__ = [
     "CartMealResponse",
     "CartResponse",
     "CurrentUserResponse",
+    "EmptyToolArguments",
+    "GetMealDetailsToolArguments",
     "MealDetailResponse",
     "MealAdminWrite",
     "MealResponse",
@@ -50,5 +64,7 @@ __all__ = [
     "PickupLocationAdminResponse",
     "PickupLocationAdminWrite",
     "PickupLocationResponse",
+    "RemoveFromCartToolArguments",
+    "SearchMealsToolArguments",
 ]
 from prepwise_api.schemas.assistant import AssistantMessageRequest, AssistantMessageResponse

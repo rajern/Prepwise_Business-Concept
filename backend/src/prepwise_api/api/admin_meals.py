@@ -6,7 +6,6 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from prepwise_api.api.meals import _meal_response
 from prepwise_api.auth import require_admin
 from prepwise_api.database import get_session
 from prepwise_api.models import (
@@ -18,6 +17,7 @@ from prepwise_api.models import (
     meal_ingredients,
 )
 from prepwise_api.schemas import AllergenResponse, MealAdminWrite, MealDetailResponse
+from prepwise_api.services.catalog import meal_response
 
 router = APIRouter(prefix="/api/admin/meals", tags=["admin meals"])
 
@@ -170,6 +170,6 @@ def _load_meal(session: Session, meal_id: UUID) -> Meal | None:
 
 def _admin_meal_response(meal: Meal) -> MealDetailResponse:
     return MealDetailResponse(
-        **_meal_response(meal).model_dump(),
+        **meal_response(meal).model_dump(),
         available=meal.available,
     )

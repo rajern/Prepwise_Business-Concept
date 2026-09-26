@@ -7,16 +7,19 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import delete, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session
 
+from prepwise_api.api.service_errors import raise_service_http_error
 from prepwise_api.auth import get_current_user
 from prepwise_api.database import get_session
 from prepwise_api.models import CartItem, Meal, Order, OrderItem, PickupLocation, User
-from prepwise_api.schemas import (
-    OrderCreate,
-    OrderDetailResponse,
-    OrderItemResponse,
-    OrderSummaryResponse,
+from prepwise_api.schemas import OrderCreate, OrderDetailResponse, OrderSummaryResponse
+from prepwise_api.services import ApplicationServiceError
+from prepwise_api.services.orders import (
+    get_user_order,
+    list_user_orders,
+    load_owned_order,
+    order_detail_response,
 )
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -107,7 +110,7 @@ def create_order(
         session.rollback()
         raise
 
-    created_order = _get_owned_order(session, order_id, user.id)
+    created_order = load_owned_order(session, order_id, user.id)
     if created_order is None:  # pragma: no cover - defensive after a successful commit
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -122,7 +125,7 @@ def create_order(
             "total_nok": str(created_order.total_nok),
         },
     )
-    return _order_detail_response(created_order)
+    return order_detail_response(created_order)
 
 
 @router.get("", response_model=list[OrderSummaryResponse])
@@ -131,12 +134,7 @@ def list_orders(
     session: Annotated[Session, Depends(get_session)],
 ) -> list[OrderSummaryResponse]:
     """Return only the authenticated user's orders, newest first."""
-    orders = session.scalars(
-        select(Order)
-        .where(Order.user_id == user.id)
-        .order_by(Order.created_at.desc(), Order.id.desc())
-    ).all()
-    return [_order_summary_response(order) for order in orders]
+    return list_user_orders(session, user.id)
 
 
 @router.get("/{order_id}", response_model=OrderDetailResponse)
@@ -146,47 +144,10 @@ def get_order(
     session: Annotated[Session, Depends(get_session)],
 ) -> OrderDetailResponse:
     """Return an owned order without revealing another user's order."""
-    order = _get_owned_order(session, order_id, user.id)
-    if order is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    return _order_detail_response(order)
-
-
-def _get_owned_order(session: Session, order_id: UUID, user_id: UUID) -> Order | None:
-    return session.scalar(
-        select(Order)
-        .options(selectinload(Order.items))
-        .where(Order.id == order_id, Order.user_id == user_id)
-    )
-
-
-def _order_summary_response(order: Order) -> OrderSummaryResponse:
-    return OrderSummaryResponse(
-        id=order.id,
-        status=order.status,
-        total_nok=order.total_nok,
-        created_at=order.created_at,
-        pickup_start_at=order.pickup_start_at,
-        pickup_end_at=order.pickup_end_at,
-        pickup_location_name=order.pickup_location_name,
-        pickup_location_address=order.pickup_location_address,
-    )
-
-
-def _order_detail_response(order: Order) -> OrderDetailResponse:
-    return OrderDetailResponse(
-        **_order_summary_response(order).model_dump(),
-        items=[
-            OrderItemResponse(
-                meal_id=item.meal_id,
-                meal_name=item.meal_name,
-                quantity=item.quantity,
-                unit_price_nok=item.unit_price_nok,
-                line_total_nok=item.unit_price_nok * item.quantity,
-            )
-            for item in order.items
-        ],
-    )
+    try:
+        return get_user_order(session, user.id, order_id)
+    except ApplicationServiceError as error:
+        raise_service_http_error(error)
 
 
 def _next_pickup_window(now: datetime | None = None) -> tuple[datetime, datetime]:

@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from prepwise_api.api.orders import _order_summary_response
 from prepwise_api.auth import require_admin
 from prepwise_api.database import get_session
 from prepwise_api.models import Order, OrderStatus, User
@@ -16,6 +15,7 @@ from prepwise_api.schemas import (
     OrderItemResponse,
     OrderStatusUpdate,
 )
+from prepwise_api.services.orders import order_summary_response
 
 router = APIRouter(prefix="/api/admin/orders", tags=["admin orders"])
 logger = logging.getLogger("prepwise.domain.orders")
@@ -107,7 +107,7 @@ def _get_admin_order(session: Session, order_id: UUID) -> Order | None:
 
 def _admin_order_summary_response(order: Order) -> AdminOrderSummaryResponse:
     return AdminOrderSummaryResponse(
-        **_order_summary_response(order).model_dump(),
+        **order_summary_response(order).model_dump(),
         customer_email=order.user.email,
         customer_display_name=order.user.display_name,
     )

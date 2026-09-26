@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -68,6 +69,11 @@ cart state returned by that final verification. Never silently add more items th
 """
 _MAX_MODEL_ROUNDS = 18
 _MAX_TOOL_CALLS = 16
+
+
+def assistant_prompt_fingerprint() -> str:
+    """Return a stable prompt identifier without exposing prompt text in reports."""
+    return hashlib.sha256(_ASSISTANT_INSTRUCTIONS.encode("utf-8")).hexdigest()
 
 
 class AssistantConfigurationError(Exception):

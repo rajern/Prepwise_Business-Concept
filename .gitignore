@@ -17,6 +17,7 @@ venv/
 node_modules/
 dist/
 coverage/
+backend/eval-results/
 playwright-report/
 test-results/
 *.tsbuildinfo

@@ -832,6 +832,8 @@ Include representative cases for:
 
 ### T12.2 — Implement automated AI evaluation
 
+**Status:** Complete
+
 Evaluate at least:
 
 * tool selection

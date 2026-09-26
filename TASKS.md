@@ -691,6 +691,8 @@ Create the backend foundation for the AI assistant.
 
 ### T9.2 — Define AI tool layer
 
+**Status:** Complete — production verified
+
 Expose controlled application capabilities such as:
 
 * search meals

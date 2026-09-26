@@ -103,6 +103,10 @@ Indexing is idempotent, and retrieval can be evaluated independently. T10.3 expo
 as a validated assistant tool: policy and guidance questions use relevant knowledge passages, while
 current meals, carts, orders and pickup locations continue to use the application tool layer.
 
+T11.1 extends the bounded tool loop into a controlled multi-step workflow. It can coordinate meal
+searches and several cart updates, recover by changing the plan after expected tool failures, block
+identical failed-call retries, and require an authoritative cart read before reporting final state.
+
 MCP and multi-agent architecture are intentionally excluded unless a real architectural need appears.
 
 ## Development approach

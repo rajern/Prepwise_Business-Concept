@@ -11,11 +11,13 @@ from openai.types.responses import (
     ResponseInputParam,
     ToolParam,
 )
+from openai.types.responses.response_create_params import ToolChoice
 from opentelemetry import trace
 from opentelemetry.trace import Span
 
 from prepwise_api.assistant_knowledge import AssistantKnowledgeSearcher, AssistantKnowledgeTool
 from prepwise_api.assistant_tools import AssistantToolContext, AssistantToolRegistry
+from prepwise_api.assistant_workflow import AssistantWorkflowState
 from prepwise_api.config import Settings, get_settings
 from prepwise_api.telemetry import record_safe_exception
 
@@ -42,8 +44,16 @@ Only call add_to_cart or remove_from_cart when the user explicitly asks for that
 Never claim that an action succeeded unless its tool result has ok=true. If a tool returns an error,
 explain the failure without inventing a result. Do not expose internal identifiers unless they are
 needed to answer the user.
+
+For multi-step requests, first retrieve authoritative candidates, then check every requested
+constraint against the returned fields before selecting items. Perform only the requested writes.
+If a write fails because data changed or validation rejects it, do not retry the identical call;
+choose another valid candidate from the retrieved results when possible, otherwise report the
+shortfall. After any cart write attempt, call get_cart before the final answer and report only the
+cart state returned by that final verification. Never silently add more items than requested.
 """
-_MAX_TOOL_ROUNDS = 5
+_MAX_MODEL_ROUNDS = 18
+_MAX_TOOL_CALLS = 16
 
 
 class AssistantConfigurationError(Exception):
@@ -127,37 +137,56 @@ class AssistantService:
                 _set_request_span_attributes(span, model, self._settings.openai_reasoning_effort)
                 response: Response | None = None
                 tool_call_count = 0
-                for _ in range(_MAX_TOOL_ROUNDS + 1):
+                workflow = AssistantWorkflowState()
+                tool_choice: ToolChoice = "auto"
+                for _ in range(_MAX_MODEL_ROUNDS):
                     response = await client.responses.create(
                         model=model,
                         reasoning={"effort": self._settings.openai_reasoning_effort},
                         instructions=_ASSISTANT_INSTRUCTIONS,
                         input=cast(ResponseInputParam, input_items),
                         tools=tools,
-                        tool_choice="auto",
+                        tool_choice=tool_choice,
                         parallel_tool_calls=False,
                         store=False,
                         extra_headers={"X-Client-Request-Id": request_id},
                     )
+                    tool_choice = "auto"
                     function_calls = _function_calls(response)
                     if not function_calls:
+                        verification_tool = workflow.required_verification_tool
+                        if verification_tool is not None:
+                            input_items.extend(response.output)
+                            tool_choice = {"type": "function", "name": verification_tool}
+                            workflow.record_forced_verification()
+                            continue
                         break
-                    if tool_call_count + len(function_calls) > _MAX_TOOL_ROUNDS:
+                    if tool_call_count + len(function_calls) > _MAX_TOOL_CALLS:
                         raise AssistantUnavailableError
 
                     input_items.extend(response.output)
                     for function_call in function_calls:
-                        if function_call.name == self._knowledge_tool.name:
-                            output = await self._knowledge_tool.execute_json(
-                                function_call.arguments,
-                                tool_context.session,
-                            )
-                        else:
-                            output = self._tool_registry.execute_json(
-                                function_call.name,
-                                function_call.arguments,
-                                tool_context,
-                            )
+                        output = workflow.repeated_failure_output(
+                            function_call.name,
+                            function_call.arguments,
+                        )
+                        if output is None:
+                            if function_call.name == self._knowledge_tool.name:
+                                output = await self._knowledge_tool.execute_json(
+                                    function_call.arguments,
+                                    tool_context.session,
+                                )
+                            else:
+                                output = self._tool_registry.execute_json(
+                                    function_call.name,
+                                    function_call.arguments,
+                                    tool_context,
+                                )
+                        workflow.record_tool_result(
+                            function_call.name,
+                            function_call.arguments,
+                            output,
+                        )
                         input_items.append(
                             {
                                 "type": "function_call_output",
@@ -178,6 +207,18 @@ class AssistantService:
                 provider_request_id = getattr(response, "_request_id", None)
                 _set_response_span_attributes(span, response, provider_request_id)
                 span.set_attribute("gen_ai.tool.call_count", tool_call_count)
+                span.set_attribute(
+                    "gen_ai.workflow.expected_failure_count",
+                    workflow.expected_failure_count,
+                )
+                span.set_attribute(
+                    "gen_ai.workflow.repeated_failure_count",
+                    workflow.repeated_failure_count,
+                )
+                span.set_attribute(
+                    "gen_ai.workflow.forced_verification_count",
+                    workflow.forced_verification_count,
+                )
                 assistant_logger.info(
                     "AI response completed",
                     extra={
@@ -187,6 +228,9 @@ class AssistantService:
                         "input_tokens": response.usage.input_tokens if response.usage else None,
                         "output_tokens": response.usage.output_tokens if response.usage else None,
                         "tool_call_count": tool_call_count,
+                        "expected_tool_failure_count": workflow.expected_failure_count,
+                        "repeated_tool_failure_count": workflow.repeated_failure_count,
+                        "forced_verification_count": workflow.forced_verification_count,
                     },
                 )
                 return AssistantReply(

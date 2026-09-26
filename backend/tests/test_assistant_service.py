@@ -279,7 +279,7 @@ def test_service_stops_an_unbounded_tool_loop() -> None:
             usage=None,
             _request_id=f"req_{index}",
         )
-        for index in range(6)
+        for index in range(17)
     ]
     create = AsyncMock(side_effect=responses)
     client = SimpleNamespace(responses=SimpleNamespace(create=create))
@@ -302,7 +302,7 @@ def test_service_stops_an_unbounded_tool_loop() -> None:
     else:
         raise AssertionError("Expected AssistantUnavailableError")
 
-    assert create.await_count == 6
+    assert create.await_count == 17
 
 
 def test_service_maps_provider_timeout() -> None:

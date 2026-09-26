@@ -99,8 +99,9 @@ instructed to preserve exact values and never invent unavailable meals or succes
 
 T10.1 adds the curated Markdown service knowledge base under `docs/knowledge-base`. T10.2 indexes
 semantic, source-aware chunks in PostgreSQL with pgvector and configurable OpenAI embeddings.
-Indexing is idempotent, and retrieval can be evaluated independently before it is connected to the
-assistant.
+Indexing is idempotent, and retrieval can be evaluated independently. T10.3 exposes that retrieval
+as a validated assistant tool: policy and guidance questions use relevant knowledge passages, while
+current meals, carts, orders and pickup locations continue to use the application tool layer.
 
 MCP and multi-agent architecture are intentionally excluded unless a real architectural need appears.
 

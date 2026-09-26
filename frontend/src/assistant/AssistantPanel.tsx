@@ -47,8 +47,8 @@ export function AssistantPanel({ accessToken }: AssistantPanelProps) {
         <span className="assistant-panel__status">Signed-in customers</span>
       </div>
       <p className="assistant-panel__intro">
-        The assistant is being connected to live Prepwise data. It will say when a
-        question needs a capability that is not available yet.
+        Ask about available meals, your cart and orders, pickup, storage, reheating,
+        allergens, or other Prepwise guidance.
       </p>
 
       {response && (

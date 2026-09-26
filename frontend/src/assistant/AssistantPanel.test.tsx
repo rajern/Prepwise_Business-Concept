@@ -10,6 +10,14 @@ afterEach(() => {
 })
 
 describe('AssistantPanel', () => {
+  it('describes both live data and service guidance capabilities', () => {
+    render(<AssistantPanel accessToken="customer-token" />)
+
+    expect(
+      screen.getByText(/Ask about available meals, your cart and orders/),
+    ).toHaveTextContent('storage, reheating, allergens')
+  })
+
   it('sends an authenticated message and displays the reply', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

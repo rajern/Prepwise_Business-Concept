@@ -749,6 +749,8 @@ Do not duplicate structured meal/order data into the knowledge base.
 
 ### T10.2 — Implement retrieval
 
+**Status:** Complete — production verified
+
 Prefer PostgreSQL + `pgvector` if it meets the requirements.
 
 **Acceptance criteria:**

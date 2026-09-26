@@ -815,6 +815,8 @@ Classify tools as read or write operations.
 
 ### T12.1 — Create evaluation dataset
 
+**Status:** Complete — production verified
+
 Include representative cases for:
 
 * meal search

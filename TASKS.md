@@ -764,6 +764,8 @@ Prefer PostgreSQL + `pgvector` if it meets the requirements.
 
 ### T10.3 — Integrate RAG into assistant
 
+**Status:** Complete — production verified
+
 **Acceptance criteria:**
 
 * assistant uses retrieval for relevant unstructured questions

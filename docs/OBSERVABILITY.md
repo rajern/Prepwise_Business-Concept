@@ -13,6 +13,61 @@ application request ID and, when telemetry is active, the OpenTelemetry trace ID
 Exception telemetry is deliberately sanitised: traces record the exception type and error status,
 not the runtime exception message, credentials, query parameters or request bodies.
 
+## AI workflow traces
+
+Each authenticated `POST /api/assistant/messages` request now contains one correlated AI workflow
+tree in Application Insights:
+
+```text
+HTTP request
+└── prepwise.ai.workflow
+    ├── openai.responses.create
+    ├── prepwise.ai.tool
+    │   ├── prepwise.ai.retrieval        (knowledge questions only)
+    │   │   ├── openai.embeddings.create
+    │   │   └── PostgreSQL dependency
+    │   └── PostgreSQL dependency        (application tools when applicable)
+    └── openai.responses.create
+```
+
+The workflow span records the request correlation ID, model, model-call count, tool-call count,
+agent-step count, aggregate token usage and bounded workflow counters. Child spans record model
+rounds, tool names/read-write classification, retrieval result count, latency and safe error types.
+The OpenAI response ID and provider request ID are retained for provider-side diagnosis.
+
+Customer messages, tool arguments, tool results, retrieved passages, user identity, API keys and
+runtime exception messages are deliberately excluded. Tool and retrieval spans expose only bounded
+operational metadata.
+
+Find the latest assistant request and inspect its complete span order:
+
+```kusto
+let operationId = toscalar(
+    AppRequests
+    | where TimeGenerated > ago(1h)
+    | where Url endswith "/api/assistant/messages"
+    | top 1 by TimeGenerated desc
+    | project OperationId
+);
+AppDependencies
+| where OperationId == operationId
+| project TimeGenerated, OperationId, ParentId, Id, Name,
+          DurationMs, Success, Properties
+| order by TimeGenerated asc
+```
+
+Inspect AI failures and the safe error classification:
+
+```kusto
+AppDependencies
+| where TimeGenerated > ago(24h)
+| where Name startswith "prepwise.ai." or Name startswith "openai."
+| where Success == false
+| project TimeGenerated, OperationId, Name, DurationMs,
+          ErrorType = tostring(Properties["error.type"])
+| order by TimeGenerated desc
+```
+
 ## Operational signals
 
 Application Insights exposes the four Milestone 1 monitoring signals:

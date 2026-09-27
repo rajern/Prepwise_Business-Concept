@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, AsyncOpenAI, RateLimitError
+from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,9 +21,10 @@ from prepwise_api.config import Settings, get_settings
 from prepwise_api.database import get_engine
 from prepwise_api.models import KnowledgeChunk
 from prepwise_api.models.knowledge import KNOWLEDGE_EMBEDDING_DIMENSIONS
-from prepwise_api.telemetry import record_safe_exception
+from prepwise_api.telemetry import record_safe_span_exception
 
 knowledge_logger = logging.getLogger("prepwise.ai.knowledge")
+_tracer = trace.get_tracer("prepwise.ai.knowledge")
 
 _MARKDOWN_HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _DEFAULT_CHUNK_CHARACTERS = 1_200
@@ -73,39 +76,63 @@ class OpenAIEmbeddingProvider:
     async def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not texts:
             return []
-        try:
-            response = await self._resolve_client().embeddings.create(
-                model=self.model,
-                input=list(texts),
-                encoding_format="float",
-                dimensions=KNOWLEDGE_EMBEDDING_DIMENSIONS,
-            )
-        except (APIConnectionError, APIStatusError, APITimeoutError, RateLimitError) as error:
-            record_safe_exception(error)
-            knowledge_logger.warning(
-                "Embedding request failed",
+        with _tracer.start_as_current_span(
+            "openai.embeddings.create",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            span.set_attribute("gen_ai.provider.name", "openai")
+            span.set_attribute("gen_ai.operation.name", "embeddings")
+            span.set_attribute("gen_ai.request.model", self.model)
+            span.set_attribute("prepwise.ai.embedding.input_count", len(texts))
+            try:
+                response = await self._resolve_client().embeddings.create(
+                    model=self.model,
+                    input=list(texts),
+                    encoding_format="float",
+                    dimensions=KNOWLEDGE_EMBEDDING_DIMENSIONS,
+                )
+            except (
+                APIConnectionError,
+                APIStatusError,
+                APITimeoutError,
+                EmbeddingConfigurationError,
+                RateLimitError,
+            ) as error:
+                record_safe_span_exception(span, error)
+                knowledge_logger.warning(
+                    "Embedding request failed",
+                    extra={
+                        "event": "ai.embedding.failed",
+                        "model": self.model,
+                        "error_type": type(error).__name__,
+                        "input_count": len(texts),
+                    },
+                )
+                if isinstance(error, EmbeddingConfigurationError):
+                    raise
+                raise EmbeddingUnavailableError from error
+
+            ordered = sorted(response.data, key=lambda item: item.index)
+            vectors = [item.embedding for item in ordered]
+            try:
+                _validate_embeddings(vectors, expected_count=len(texts))
+            except Exception as error:
+                record_safe_span_exception(span, error)
+                raise
+            span.set_attribute("gen_ai.response.model", self.model)
+            span.set_attribute("gen_ai.usage.input_tokens", response.usage.prompt_tokens)
+            span.set_status(Status(StatusCode.OK))
+            knowledge_logger.info(
+                "Embedding request completed",
                 extra={
-                    "event": "ai.embedding.failed",
+                    "event": "ai.embedding.completed",
                     "model": self.model,
-                    "error_type": type(error).__name__,
                     "input_count": len(texts),
+                    "input_tokens": response.usage.prompt_tokens,
                 },
             )
-            raise EmbeddingUnavailableError from error
-
-        ordered = sorted(response.data, key=lambda item: item.index)
-        vectors = [item.embedding for item in ordered]
-        _validate_embeddings(vectors, expected_count=len(texts))
-        knowledge_logger.info(
-            "Embedding request completed",
-            extra={
-                "event": "ai.embedding.completed",
-                "model": self.model,
-                "input_count": len(texts),
-                "input_tokens": response.usage.prompt_tokens,
-            },
-        )
-        return vectors
+            return vectors
 
 
 @dataclass(frozen=True, slots=True)
@@ -334,36 +361,54 @@ class KnowledgeRetriever:
         if not -1 <= minimum_score <= 1:
             raise ValueError("minimum_score must be between -1 and 1")
 
-        vectors = await self._provider.embed([normalized_query])
-        query_embedding = vectors[0]
-        bind = session.get_bind()
-        if bind.dialect.name == "postgresql":
-            ranked = _postgresql_matches(
-                session,
-                query_embedding,
-                self._provider.model,
-                limit,
-            )
-        else:
-            ranked = _portable_matches(
-                session,
-                query_embedding,
-                self._provider.model,
-                limit,
-            )
+        with _tracer.start_as_current_span(
+            "prepwise.ai.retrieval",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            span.set_attribute("prepwise.ai.retrieval.limit", limit)
+            span.set_attribute("prepwise.ai.retrieval.minimum_score", minimum_score)
+            span.set_attribute("gen_ai.request.model", self._provider.model)
+            try:
+                vectors = await self._provider.embed([normalized_query])
+                query_embedding = vectors[0]
+                bind = session.get_bind()
+                span.set_attribute("db.system.name", bind.dialect.name)
+                if bind.dialect.name == "postgresql":
+                    ranked = _postgresql_matches(
+                        session,
+                        query_embedding,
+                        self._provider.model,
+                        limit,
+                    )
+                else:
+                    ranked = _portable_matches(
+                        session,
+                        query_embedding,
+                        self._provider.model,
+                        limit,
+                    )
 
-        return [
-            KnowledgeMatch(
-                content=chunk.content,
-                source_path=chunk.source_path,
-                source_title=chunk.source_title,
-                section_title=chunk.section_title,
-                chunk_index=chunk.chunk_index,
-                score=score,
-            )
-            for chunk, score in ranked
-            if score >= minimum_score
-        ]
+                matches = [
+                    KnowledgeMatch(
+                        content=chunk.content,
+                        source_path=chunk.source_path,
+                        source_title=chunk.source_title,
+                        section_title=chunk.section_title,
+                        chunk_index=chunk.chunk_index,
+                        score=score,
+                    )
+                    for chunk, score in ranked
+                    if score >= minimum_score
+                ]
+                span.set_attribute("prepwise.ai.retrieval.result_count", len(matches))
+                if matches:
+                    span.set_attribute("prepwise.ai.retrieval.top_score", matches[0].score)
+                span.set_status(Status(StatusCode.OK))
+                return matches
+            except Exception as error:
+                record_safe_span_exception(span, error)
+                raise
 
 
 def _postgresql_matches(

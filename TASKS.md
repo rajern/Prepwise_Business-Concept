@@ -856,6 +856,8 @@ Evaluate at least:
 
 ### T13.1 — Trace AI workflows
 
+**Status:** Complete
+
 Make it possible to inspect:
 
 `user → LLM → retrieval/tool → backend/database → LLM → response`

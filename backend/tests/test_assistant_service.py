@@ -5,11 +5,16 @@ from typing import cast
 from unittest.mock import AsyncMock
 
 import httpx
+import pytest
 from openai import APITimeoutError, AsyncOpenAI
 from openai.types.responses import ResponseFunctionToolCall
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
+import prepwise_api.assistant as assistant_module
 from prepwise_api.assistant import (
     AssistantService,
     AssistantTimeoutError,
@@ -326,3 +331,83 @@ def test_service_maps_provider_timeout() -> None:
         pass
     else:
         raise AssertionError("Expected AssistantTimeoutError")
+
+
+def test_service_traces_workflow_model_and_tool_steps_without_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exporter = InMemorySpanExporter()
+    provider = TracerProvider()
+    provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(
+        assistant_module,
+        "_tracer",
+        provider.get_tracer("prepwise.ai.test"),
+    )
+    function_call = ResponseFunctionToolCall(
+        type="function_call",
+        name="search_meals",
+        arguments='{"min_protein_grams":40}',
+        call_id="call_trace",
+    )
+    responses = [
+        SimpleNamespace(
+            id="resp_trace_tool",
+            model="gpt-5.6-terra",
+            output_text="",
+            output=[function_call],
+            usage=SimpleNamespace(input_tokens=8, output_tokens=2),
+            _request_id="req_trace_tool",
+        ),
+        SimpleNamespace(
+            id="resp_trace_final",
+            model="gpt-5.6-terra",
+            output_text="Protein Bowl has 45 g protein.",
+            output=[],
+            usage=SimpleNamespace(input_tokens=40, output_tokens=10),
+            _request_id="req_trace_final",
+        ),
+    ]
+    create = AsyncMock(side_effect=responses)
+    client = SimpleNamespace(responses=SimpleNamespace(create=create))
+    service = AssistantService(
+        Settings(openai_api_key=SecretStr("test-key")),
+        cast(AsyncOpenAI, client),
+        RecordingToolRegistry(),
+        RecordingKnowledgeTool(),
+    )
+
+    asyncio.run(
+        service.respond(
+            message="private customer request",
+            request_id="request-trace-123",
+            tool_context=_tool_context(),
+        )
+    )
+
+    spans = exporter.get_finished_spans()
+    assert [span.name for span in spans] == [
+        "openai.responses.create",
+        "prepwise.ai.tool",
+        "openai.responses.create",
+        "prepwise.ai.workflow",
+    ]
+    workflow_span = spans[-1]
+    workflow_attributes = dict(workflow_span.attributes or {})
+    assert workflow_attributes["prepwise.request_id"] == "request-trace-123"
+    assert workflow_attributes["prepwise.ai.model.call_count"] == 2
+    assert workflow_attributes["gen_ai.tool.call_count"] == 1
+    assert workflow_attributes["prepwise.ai.agent.step_count"] == 3
+    assert workflow_attributes["gen_ai.usage.input_tokens"] == 48
+    assert workflow_attributes["gen_ai.usage.output_tokens"] == 12
+    assert all(span.context.trace_id == workflow_span.context.trace_id for span in spans)
+    for span in spans[:-1]:
+        assert span.parent is not None
+        assert span.parent.span_id == workflow_span.context.span_id
+    serialized_trace = str(
+        [(span.name, dict(span.attributes or {}), span.events) for span in spans]
+    )
+    assert "private customer request" not in serialized_trace
+    assert "min_protein_grams" not in serialized_trace
+    assert "Protein Bowl has 45 g protein" not in serialized_trace
+    provider.shutdown()

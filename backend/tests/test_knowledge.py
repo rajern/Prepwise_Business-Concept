@@ -6,13 +6,18 @@ from types import SimpleNamespace
 from typing import cast
 from unittest.mock import AsyncMock
 
+import pytest
 from openai import AsyncOpenAI
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from pydantic import SecretStr
 from sqlalchemy import create_engine, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+import prepwise_api.knowledge as knowledge_module
 from prepwise_api.config import Settings
 from prepwise_api.knowledge import (
     KnowledgeIndexer,
@@ -121,11 +126,22 @@ def test_indexer_is_idempotent_and_reindexes_only_changed_chunks(tmp_path: Path)
     assert len(provider.nonempty_calls[1]) == 1
 
 
-def test_retrieval_is_independently_evaluable_and_preserves_metadata(tmp_path: Path) -> None:
+def test_retrieval_is_independently_evaluable_and_preserves_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     knowledge_directory = _copy_knowledge_base(tmp_path)
     provider = KeywordEmbeddingProvider()
     engine = _create_test_engine()
     Base.metadata.create_all(engine)
+    exporter = InMemorySpanExporter()
+    trace_provider = TracerProvider()
+    trace_provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(
+        knowledge_module,
+        "_tracer",
+        trace_provider.get_tracer("prepwise.ai.knowledge.test"),
+    )
     try:
         with Session(engine) as session:
             asyncio.run(KnowledgeIndexer(provider).index(session, knowledge_directory))
@@ -146,9 +162,20 @@ def test_retrieval_is_independently_evaluable_and_preserves_metadata(tmp_path: P
     assert matches[0].chunk_index == 0
     assert "thoroughly hot" in matches[0].content
     assert matches[0].score > 0.8
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "prepwise.ai.retrieval"
+    attributes = dict(spans[0].attributes or {})
+    assert attributes["prepwise.ai.retrieval.result_count"] == len(matches)
+    assert attributes["db.system.name"] == "sqlite"
+    assert "How should I reheat" not in str(attributes)
+    assert "thoroughly hot" not in str(attributes)
+    trace_provider.shutdown()
 
 
-def test_openai_embedding_provider_uses_configured_model_and_fixed_dimensions() -> None:
+def test_openai_embedding_provider_uses_configured_model_and_fixed_dimensions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     embedding = [0.001] * KNOWLEDGE_EMBEDDING_DIMENSIONS
     response = SimpleNamespace(
         data=[SimpleNamespace(index=0, embedding=embedding)],
@@ -161,6 +188,14 @@ def test_openai_embedding_provider_uses_configured_model_and_fixed_dimensions() 
         openai_embedding_model="text-embedding-3-small",
     )
     provider = OpenAIEmbeddingProvider(settings, cast(AsyncOpenAI, client))
+    exporter = InMemorySpanExporter()
+    trace_provider = TracerProvider()
+    trace_provider.add_span_processor(SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(
+        knowledge_module,
+        "_tracer",
+        trace_provider.get_tracer("prepwise.ai.embedding.test"),
+    )
 
     result = asyncio.run(provider.embed(["Storage guidance"]))
 
@@ -171,3 +206,12 @@ def test_openai_embedding_provider_uses_configured_model_and_fixed_dimensions() 
         encoding_format="float",
         dimensions=KNOWLEDGE_EMBEDDING_DIMENSIONS,
     )
+    spans = exporter.get_finished_spans()
+    assert len(spans) == 1
+    assert spans[0].name == "openai.embeddings.create"
+    attributes = dict(spans[0].attributes or {})
+    assert attributes["gen_ai.request.model"] == "text-embedding-3-small"
+    assert attributes["prepwise.ai.embedding.input_count"] == 1
+    assert attributes["gen_ai.usage.input_tokens"] == 7
+    assert "Storage guidance" not in str(attributes)
+    trace_provider.shutdown()

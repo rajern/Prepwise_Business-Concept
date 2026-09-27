@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -14,7 +15,7 @@ from openai.types.responses import (
 )
 from openai.types.responses.response_create_params import ToolChoice
 from opentelemetry import trace
-from opentelemetry.trace import Span
+from opentelemetry.trace import Span, Status, StatusCode
 
 from prepwise_api.assistant_knowledge import AssistantKnowledgeSearcher, AssistantKnowledgeTool
 from prepwise_api.assistant_tools import (
@@ -24,7 +25,7 @@ from prepwise_api.assistant_tools import (
 )
 from prepwise_api.assistant_workflow import AssistantWorkflowState
 from prepwise_api.config import Settings, get_settings
-from prepwise_api.telemetry import record_safe_exception
+from prepwise_api.telemetry import record_safe_exception, record_safe_span_exception
 
 assistant_logger = logging.getLogger("prepwise.ai")
 _tracer = trace.get_tracer("prepwise.ai")
@@ -140,7 +141,6 @@ class AssistantService:
         request_id: str,
         tool_context: AssistantToolContext,
     ) -> AssistantReply:
-        client = self._resolve_client()
         model = self._settings.openai_model
         tools = cast(
             Iterable[ToolParam],
@@ -150,122 +150,194 @@ class AssistantService:
 
         try:
             with _tracer.start_as_current_span(
-                "openai.responses.create",
+                "prepwise.ai.workflow",
                 record_exception=False,
                 set_status_on_exception=False,
-            ) as span:
-                _set_request_span_attributes(span, model, self._settings.openai_reasoning_effort)
+            ) as workflow_span:
+                _set_workflow_span_attributes(workflow_span, request_id, model)
                 response: Response | None = None
+                provider_request_id: str | None = None
                 tool_call_count = 0
+                model_call_count = 0
+                agent_step_count = 0
+                total_input_tokens = 0
+                total_output_tokens = 0
                 workflow = AssistantWorkflowState()
                 tool_choice: ToolChoice = "auto"
-                for _ in range(_MAX_MODEL_ROUNDS):
-                    response = await client.responses.create(
-                        model=model,
-                        reasoning={"effort": self._settings.openai_reasoning_effort},
-                        instructions=_ASSISTANT_INSTRUCTIONS,
-                        input=cast(ResponseInputParam, input_items),
-                        tools=tools,
-                        tool_choice=tool_choice,
-                        parallel_tool_calls=False,
-                        store=False,
-                        extra_headers={"X-Client-Request-Id": request_id},
-                    )
-                    tool_choice = "auto"
-                    function_calls = _function_calls(response)
-                    if not function_calls:
-                        verification_tool = workflow.required_verification_tool
-                        if verification_tool is not None:
-                            input_items.extend(response.output)
-                            tool_choice = {"type": "function", "name": verification_tool}
-                            workflow.record_forced_verification()
-                            continue
-                        break
-                    if tool_call_count + len(function_calls) > _MAX_TOOL_CALLS:
+                try:
+                    client = self._resolve_client()
+                    for round_index in range(_MAX_MODEL_ROUNDS):
+                        with _tracer.start_as_current_span(
+                            "openai.responses.create",
+                            record_exception=False,
+                            set_status_on_exception=False,
+                        ) as model_span:
+                            _set_request_span_attributes(
+                                model_span,
+                                model,
+                                self._settings.openai_reasoning_effort,
+                            )
+                            model_span.set_attribute("prepwise.ai.step.index", agent_step_count)
+                            model_span.set_attribute("prepwise.ai.model.round", round_index)
+                            model_span.set_attribute(
+                                "prepwise.ai.model.forced_tool",
+                                tool_choice != "auto",
+                            )
+                            model_call_count += 1
+                            agent_step_count += 1
+                            try:
+                                response = await client.responses.create(
+                                    model=model,
+                                    reasoning={"effort": self._settings.openai_reasoning_effort},
+                                    instructions=_ASSISTANT_INSTRUCTIONS,
+                                    input=cast(ResponseInputParam, input_items),
+                                    tools=tools,
+                                    tool_choice=tool_choice,
+                                    parallel_tool_calls=False,
+                                    store=False,
+                                    extra_headers={"X-Client-Request-Id": request_id},
+                                )
+                            except Exception as error:
+                                record_safe_span_exception(model_span, error)
+                                raise
+                            provider_request_id = getattr(response, "_request_id", None)
+                            _set_response_span_attributes(
+                                model_span,
+                                response,
+                                provider_request_id,
+                            )
+                            function_calls = _function_calls(response)
+                            model_span.set_attribute(
+                                "gen_ai.tool.call_count",
+                                len(function_calls),
+                            )
+                            if response.usage is not None:
+                                total_input_tokens += response.usage.input_tokens
+                                total_output_tokens += response.usage.output_tokens
+                            model_span.set_status(Status(StatusCode.OK))
+
+                        tool_choice = "auto"
+                        if not function_calls:
+                            verification_tool = workflow.required_verification_tool
+                            if verification_tool is not None:
+                                input_items.extend(response.output)
+                                tool_choice = {"type": "function", "name": verification_tool}
+                                workflow.record_forced_verification()
+                                continue
+                            break
+                        if tool_call_count + len(function_calls) > _MAX_TOOL_CALLS:
+                            raise AssistantUnavailableError
+                        tool_call_count += len(function_calls)
+
+                        input_items.extend(response.output)
+                        for function_call in function_calls:
+                            with _tracer.start_as_current_span(
+                                "prepwise.ai.tool",
+                                record_exception=False,
+                                set_status_on_exception=False,
+                            ) as tool_span:
+                                tool_span.set_attribute(
+                                    "gen_ai.tool.name",
+                                    function_call.name,
+                                )
+                                tool_span.set_attribute(
+                                    "prepwise.ai.step.index",
+                                    agent_step_count,
+                                )
+                                agent_step_count += 1
+                                try:
+                                    operation = (
+                                        AssistantToolOperation.READ
+                                        if function_call.name == self._knowledge_tool.name
+                                        else self._tool_registry.operation(function_call.name)
+                                    )
+                                    tool_span.set_attribute(
+                                        "prepwise.ai.tool.operation",
+                                        operation.value,
+                                    )
+                                    output = workflow.repeated_failure_output(
+                                        function_call.name,
+                                        function_call.arguments,
+                                    )
+                                    if output is None:
+                                        if function_call.name == self._knowledge_tool.name:
+                                            output = await self._knowledge_tool.execute_json(
+                                                function_call.arguments,
+                                                tool_context.session,
+                                            )
+                                        else:
+                                            output = self._tool_registry.execute_json(
+                                                function_call.name,
+                                                function_call.arguments,
+                                                tool_context,
+                                            )
+                                    workflow.record_tool_result(
+                                        function_call.name,
+                                        function_call.arguments,
+                                        output,
+                                        operation=operation,
+                                    )
+                                    _set_tool_span_result(tool_span, output)
+                                except Exception as error:
+                                    record_safe_span_exception(tool_span, error)
+                                    raise
+                            input_items.append(
+                                {
+                                    "type": "function_call_output",
+                                    "call_id": function_call.call_id,
+                                    "output": output,
+                                }
+                            )
+                    else:
                         raise AssistantUnavailableError
 
-                    input_items.extend(response.output)
-                    for function_call in function_calls:
-                        operation = (
-                            AssistantToolOperation.READ
-                            if function_call.name == self._knowledge_tool.name
-                            else self._tool_registry.operation(function_call.name)
-                        )
-                        output = workflow.repeated_failure_output(
-                            function_call.name,
-                            function_call.arguments,
-                        )
-                        if output is None:
-                            if function_call.name == self._knowledge_tool.name:
-                                output = await self._knowledge_tool.execute_json(
-                                    function_call.arguments,
-                                    tool_context.session,
-                                )
-                            else:
-                                output = self._tool_registry.execute_json(
-                                    function_call.name,
-                                    function_call.arguments,
-                                    tool_context,
-                                )
-                        workflow.record_tool_result(
-                            function_call.name,
-                            function_call.arguments,
-                            output,
-                            operation=operation,
-                        )
-                        input_items.append(
-                            {
-                                "type": "function_call_output",
-                                "call_id": function_call.call_id,
-                                "output": output,
-                            }
-                        )
-                    tool_call_count += len(function_calls)
-                else:
-                    raise AssistantUnavailableError
+                    if response is None:
+                        raise AssistantUnavailableError
+                    response_text = response.output_text.strip()
+                    if not response_text:
+                        raise AssistantUnavailableError
 
-                if response is None:
-                    raise AssistantUnavailableError
-                response_text = response.output_text.strip()
-                if not response_text:
-                    raise AssistantUnavailableError
-
-                provider_request_id = getattr(response, "_request_id", None)
-                _set_response_span_attributes(span, response, provider_request_id)
-                span.set_attribute("gen_ai.tool.call_count", tool_call_count)
-                span.set_attribute(
-                    "gen_ai.workflow.expected_failure_count",
-                    workflow.expected_failure_count,
-                )
-                span.set_attribute(
-                    "gen_ai.workflow.repeated_failure_count",
-                    workflow.repeated_failure_count,
-                )
-                span.set_attribute(
-                    "gen_ai.workflow.forced_verification_count",
-                    workflow.forced_verification_count,
-                )
-                span.set_attribute("gen_ai.workflow.write_call_count", workflow.write_call_count)
-                assistant_logger.info(
-                    "AI response completed",
-                    extra={
-                        "event": "ai.response.completed",
-                        "model": response.model,
-                        "provider_request_id": provider_request_id,
-                        "input_tokens": response.usage.input_tokens if response.usage else None,
-                        "output_tokens": response.usage.output_tokens if response.usage else None,
-                        "tool_call_count": tool_call_count,
-                        "expected_tool_failure_count": workflow.expected_failure_count,
-                        "repeated_tool_failure_count": workflow.repeated_failure_count,
-                        "forced_verification_count": workflow.forced_verification_count,
-                        "write_tool_call_count": workflow.write_call_count,
-                    },
-                )
-                return AssistantReply(
-                    text=response_text,
-                    model=response.model,
-                    response_id=response.id,
-                )
+                    _set_response_span_attributes(
+                        workflow_span,
+                        response,
+                        provider_request_id,
+                    )
+                    workflow_span.set_status(Status(StatusCode.OK))
+                    assistant_logger.info(
+                        "AI response completed",
+                        extra={
+                            "event": "ai.response.completed",
+                            "model": response.model,
+                            "provider_request_id": provider_request_id,
+                            "input_tokens": total_input_tokens,
+                            "output_tokens": total_output_tokens,
+                            "model_call_count": model_call_count,
+                            "tool_call_count": tool_call_count,
+                            "agent_step_count": agent_step_count,
+                            "expected_tool_failure_count": workflow.expected_failure_count,
+                            "repeated_tool_failure_count": workflow.repeated_failure_count,
+                            "forced_verification_count": workflow.forced_verification_count,
+                            "write_tool_call_count": workflow.write_call_count,
+                        },
+                    )
+                    return AssistantReply(
+                        text=response_text,
+                        model=response.model,
+                        response_id=response.id,
+                    )
+                except Exception as error:
+                    record_safe_span_exception(workflow_span, error)
+                    raise
+                finally:
+                    _set_workflow_summary_attributes(
+                        workflow_span,
+                        model_call_count=model_call_count,
+                        tool_call_count=tool_call_count,
+                        agent_step_count=agent_step_count,
+                        input_tokens=total_input_tokens,
+                        output_tokens=total_output_tokens,
+                        workflow=workflow,
+                    )
         except APITimeoutError as error:
             _record_failure(error, model, "ai.response.timeout")
             raise AssistantTimeoutError from error
@@ -276,6 +348,46 @@ class AssistantService:
 
 def _function_calls(response: Response) -> list[ResponseFunctionToolCall]:
     return [item for item in response.output if isinstance(item, ResponseFunctionToolCall)]
+
+
+def _set_workflow_span_attributes(span: Span, request_id: str, model: str) -> None:
+    span.set_attribute("prepwise.request_id", request_id)
+    span.set_attribute("gen_ai.operation.name", "invoke_agent")
+    span.set_attribute("gen_ai.provider.name", "openai")
+    span.set_attribute("gen_ai.request.model", model)
+
+
+def _set_workflow_summary_attributes(
+    span: Span,
+    *,
+    model_call_count: int,
+    tool_call_count: int,
+    agent_step_count: int,
+    input_tokens: int,
+    output_tokens: int,
+    workflow: AssistantWorkflowState,
+) -> None:
+    span.set_attribute("prepwise.ai.model.call_count", model_call_count)
+    span.set_attribute("gen_ai.tool.call_count", tool_call_count)
+    span.set_attribute("prepwise.ai.agent.step_count", agent_step_count)
+    span.set_attribute("gen_ai.usage.input_tokens", input_tokens)
+    span.set_attribute("gen_ai.usage.output_tokens", output_tokens)
+    span.set_attribute(
+        "prepwise.ai.workflow.expected_failure_count",
+        workflow.expected_failure_count,
+    )
+    span.set_attribute(
+        "prepwise.ai.workflow.repeated_failure_count",
+        workflow.repeated_failure_count,
+    )
+    span.set_attribute(
+        "prepwise.ai.workflow.forced_verification_count",
+        workflow.forced_verification_count,
+    )
+    span.set_attribute(
+        "prepwise.ai.workflow.write_call_count",
+        workflow.write_call_count,
+    )
 
 
 def _set_request_span_attributes(span: Span, model: str, reasoning_effort: str) -> None:
@@ -302,6 +414,34 @@ def _set_response_span_attributes(
     if usage is not None:
         span.set_attribute("gen_ai.usage.input_tokens", usage.input_tokens)
         span.set_attribute("gen_ai.usage.output_tokens", usage.output_tokens)
+
+
+def _set_tool_span_result(span: Span, output: str) -> None:
+    try:
+        payload: object = json.loads(output)
+    except json.JSONDecodeError:
+        span.set_attribute("prepwise.ai.tool.success", False)
+        span.set_attribute("error.type", "invalid_tool_output")
+        span.set_status(Status(StatusCode.ERROR, "invalid_tool_output"))
+        return
+    if not isinstance(payload, dict):
+        span.set_attribute("prepwise.ai.tool.success", False)
+        span.set_attribute("error.type", "invalid_tool_output")
+        span.set_status(Status(StatusCode.ERROR, "invalid_tool_output"))
+        return
+    succeeded = payload.get("ok") is True
+    span.set_attribute("prepwise.ai.tool.success", succeeded)
+    if succeeded:
+        span.set_status(Status(StatusCode.OK))
+        return
+    error = payload.get("error")
+    error_code = "tool_failed"
+    if not succeeded and isinstance(error, dict):
+        candidate = error.get("code")
+        if isinstance(candidate, str):
+            error_code = candidate
+    span.set_attribute("error.type", error_code)
+    span.set_status(Status(StatusCode.ERROR, error_code))
 
 
 def _record_failure(error: Exception, model: str, event: str) -> None:

@@ -28,6 +28,17 @@ _SAFE_EXTRA_FIELDS = (
     "provider_request_id",
     "input_tokens",
     "output_tokens",
+    "model_call_count",
+    "tool_call_count",
+    "tool_name",
+    "tool_operation",
+    "retrieval_count",
+    "agent_step_count",
+    "expected_tool_failure_count",
+    "repeated_tool_failure_count",
+    "forced_verification_count",
+    "write_tool_call_count",
+    "input_count",
 )
 
 

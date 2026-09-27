@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING
 from prepwise_api.config import Settings, get_settings
 
 if TYPE_CHECKING:
+    from opentelemetry.trace import Span
     from sqlalchemy.engine import Engine
 
 _telemetry_configured = False
@@ -68,11 +69,16 @@ def record_safe_exception(exception: Exception) -> None:
         return
 
     from opentelemetry import trace
-    from opentelemetry.trace import Status, StatusCode
 
-    span = trace.get_current_span()
+    record_safe_span_exception(trace.get_current_span(), exception)
+
+
+def record_safe_span_exception(span: "Span", exception: Exception) -> None:
+    """Mark a supplied span as failed without exporting runtime messages or values."""
     if not span.is_recording():
         return
+    from opentelemetry.trace import Status, StatusCode
+
     error_type = type(exception).__name__
     span.add_event("exception", {"exception.type": error_type})
     span.set_status(Status(StatusCode.ERROR, error_type))

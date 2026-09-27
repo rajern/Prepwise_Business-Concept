@@ -72,9 +72,11 @@ Milestone 1 is intended to be independently portfolio-ready.
 
 ## Milestone 2 — AI application layer
 
+**Status: Complete and production verified.**
+
 The second milestone adds an AI assistant on top of the production system.
 
-Planned capabilities include:
+Implemented capabilities include:
 
 * tool/function calling over application functionality
 * RAG for unstructured service knowledge
@@ -106,6 +108,10 @@ current meals, carts, orders and pickup locations continue to use the applicatio
 T11.1 extends the bounded tool loop into a controlled multi-step workflow. It can coordinate meal
 searches and several cart updates, recover by changing the plan after expected tool failures, block
 identical failed-call retries, and require an authoritative cart read before reporting final state.
+
+T12–T14 add a 32-case live evaluation suite, correlated AI workflow tracing and final production
+QA. The final run passed 32/32 cases with a 0.997 mean score; CI, critical E2E flows, production
+smoke tests, authenticated write safeguards and full structured-write/RAG traces were verified.
 
 MCP and multi-agent architecture are intentionally excluded unless a real architectural need appears.
 
@@ -245,9 +251,8 @@ the step that needs them.
 
 ## Status
 
-**Milestone 1 complete. Milestone 2 in progress.**
+**Milestones 1 and 2 complete and production verified.**
 
-The complete non-AI product is implemented, tested and running in production. Customer and admin
-journeys, security controls, CI/CD, observability, alerting and production smoke tests have been
-verified. The authenticated AI assistant and its initial application tools are now being added as
-defined in `TASKS.md`.
+The complete product and AI assistant are implemented, tested and running in production. Customer,
+admin and AI journeys, security controls, CI/CD, evals, observability, alerting and production smoke
+tests have been verified.

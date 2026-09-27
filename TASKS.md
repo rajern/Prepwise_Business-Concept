@@ -672,6 +672,8 @@ At this point Prepwise is ready to be presented on CV and GitHub.
 
 # Milestone 2 — AI application layer
 
+**Status:** Complete — production verified 2026-09-27
+
 ## 9. AI foundation
 
 ### T9.1 — Add model integration
@@ -881,6 +883,8 @@ Capture where appropriate:
 
 ## 14. Milestone 2 final QA
 
+**Status:** Complete — production verified 2026-09-27
+
 Verify:
 
 * direct AI questions
@@ -892,6 +896,10 @@ Verify:
 * eval suite
 * traces
 * failure handling
+
+Final verification passed with 32/32 live AI eval cases, a 0.997 mean score, all CI and critical
+E2E jobs, production smoke tests, authenticated write-safeguard checks, and complete production
+traces for structured writes and RAG.
 
 **Milestone 2 is complete when the AI assistant works reliably on top of the production application and its behaviour can be tested and observed.**
 

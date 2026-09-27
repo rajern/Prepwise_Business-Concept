@@ -99,9 +99,9 @@ Before Milestone 1 is considered complete:
 
 ## Milestone 2 — AI application layer
 
-Milestone 2 starts only after Milestone 1 is stable.
+**Status: Complete — production verified 2026-09-27.**
 
-Planned order:
+Delivered in this order:
 
 1. model integration and AI foundation
 2. backend tool/function calling

@@ -374,20 +374,34 @@ class KnowledgeRetriever:
                 query_embedding = vectors[0]
                 bind = session.get_bind()
                 span.set_attribute("db.system.name", bind.dialect.name)
-                if bind.dialect.name == "postgresql":
-                    ranked = _postgresql_matches(
-                        session,
-                        query_embedding,
-                        self._provider.model,
-                        limit,
-                    )
-                else:
-                    ranked = _portable_matches(
-                        session,
-                        query_embedding,
-                        self._provider.model,
-                        limit,
-                    )
+                with _tracer.start_as_current_span(
+                    "prepwise.ai.database.query",
+                    record_exception=False,
+                    set_status_on_exception=False,
+                ) as database_span:
+                    database_span.set_attribute("db.system.name", bind.dialect.name)
+                    database_span.set_attribute("db.operation.name", "SELECT")
+                    database_span.set_attribute("db.collection.name", "knowledge_chunks")
+                    try:
+                        if bind.dialect.name == "postgresql":
+                            ranked = _postgresql_matches(
+                                session,
+                                query_embedding,
+                                self._provider.model,
+                                limit,
+                            )
+                        else:
+                            ranked = _portable_matches(
+                                session,
+                                query_embedding,
+                                self._provider.model,
+                                limit,
+                            )
+                    except Exception as error:
+                        record_safe_span_exception(database_span, error)
+                        raise
+                    database_span.set_attribute("db.response.returned_rows", len(ranked))
+                    database_span.set_status(Status(StatusCode.OK))
 
                 matches = [
                     KnowledgeMatch(

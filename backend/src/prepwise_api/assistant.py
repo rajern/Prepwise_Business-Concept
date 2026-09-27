@@ -168,7 +168,7 @@ class AssistantService:
                     client = self._resolve_client()
                     for round_index in range(_MAX_MODEL_ROUNDS):
                         with _tracer.start_as_current_span(
-                            "openai.responses.create",
+                            "prepwise.ai.model",
                             record_exception=False,
                             set_status_on_exception=False,
                         ) as model_span:

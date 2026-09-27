@@ -163,13 +163,26 @@ def test_retrieval_is_independently_evaluable_and_preserves_metadata(
     assert "thoroughly hot" in matches[0].content
     assert matches[0].score > 0.8
     spans = exporter.get_finished_spans()
-    assert len(spans) == 1
-    assert spans[0].name == "prepwise.ai.retrieval"
-    attributes = dict(spans[0].attributes or {})
+    assert [span.name for span in spans] == [
+        "prepwise.ai.database.query",
+        "prepwise.ai.retrieval",
+    ]
+    database_span, retrieval_span = spans
+    assert database_span.parent is not None
+    assert database_span.parent.span_id == retrieval_span.context.span_id
+    database_attributes = dict(database_span.attributes or {})
+    assert database_attributes["db.system.name"] == "sqlite"
+    assert database_attributes["db.operation.name"] == "SELECT"
+    assert database_attributes["db.collection.name"] == "knowledge_chunks"
+    assert cast(int, database_attributes["db.response.returned_rows"]) >= len(matches)
+    attributes = dict(retrieval_span.attributes or {})
     assert attributes["prepwise.ai.retrieval.result_count"] == len(matches)
     assert attributes["db.system.name"] == "sqlite"
-    assert "How should I reheat" not in str(attributes)
-    assert "thoroughly hot" not in str(attributes)
+    serialized_trace = str(
+        [(span.name, dict(span.attributes or {}), span.events) for span in spans]
+    )
+    assert "How should I reheat" not in serialized_trace
+    assert "thoroughly hot" not in serialized_trace
     trace_provider.shutdown()
 
 

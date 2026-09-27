@@ -21,13 +21,13 @@ tree in Application Insights:
 ```text
 HTTP request
 └── prepwise.ai.workflow
-    ├── openai.responses.create
+    ├── prepwise.ai.model
     ├── prepwise.ai.tool
     │   ├── prepwise.ai.retrieval        (knowledge questions only)
     │   │   ├── openai.embeddings.create
-    │   │   └── PostgreSQL dependency
+    │   │   └── prepwise.ai.database.query
     │   └── PostgreSQL dependency        (application tools when applicable)
-    └── openai.responses.create
+    └── prepwise.ai.model
 ```
 
 The workflow span records the request correlation ID, model, model-call count, tool-call count,

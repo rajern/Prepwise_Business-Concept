@@ -387,9 +387,9 @@ def test_service_traces_workflow_model_and_tool_steps_without_content(
 
     spans = exporter.get_finished_spans()
     assert [span.name for span in spans] == [
-        "openai.responses.create",
+        "prepwise.ai.model",
         "prepwise.ai.tool",
-        "openai.responses.create",
+        "prepwise.ai.model",
         "prepwise.ai.workflow",
     ]
     workflow_span = spans[-1]

@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
@@ -8,6 +9,15 @@ from sqlalchemy.orm import Session, selectinload
 from prepwise_api.models import Ingredient, Meal
 from prepwise_api.schemas import AllergenResponse, MealDetailResponse, MealResponse
 from prepwise_api.services import ApplicationNotFoundError
+
+_SEARCH_TERM = re.compile(r"[\wæøåÆØÅ-]+", re.UNICODE)
+_SEARCH_STOP_WORDS = {
+    "and",
+    "med",
+    "og",
+    "the",
+    "with",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,13 +44,21 @@ def search_available_meals(
     if active_filters.query:
         escaped_query = _escape_like(active_filters.query)
         pattern = f"%{escaped_query}%"
-        statement = statement.where(
-            or_(
-                Meal.name.ilike(pattern, escape="\\"),
-                Meal.description.ilike(pattern, escape="\\"),
-                Meal.ingredients.any(Ingredient.name.ilike(pattern, escape="\\")),
+        predicates = [
+            Meal.name.ilike(pattern, escape="\\"),
+            Meal.description.ilike(pattern, escape="\\"),
+            Meal.ingredients.any(Ingredient.name.ilike(pattern, escape="\\")),
+        ]
+        for term in _search_terms(active_filters.query):
+            term_pattern = f"%{_escape_like(term)}%"
+            predicates.extend(
+                [
+                    Meal.name.ilike(term_pattern, escape="\\"),
+                    Meal.description.ilike(term_pattern, escape="\\"),
+                    Meal.ingredients.any(Ingredient.name.ilike(term_pattern, escape="\\")),
+                ]
             )
-        )
+        statement = statement.where(or_(*predicates))
     if active_filters.min_protein_grams is not None:
         statement = statement.where(Meal.protein_grams >= active_filters.min_protein_grams)
     if active_filters.max_calories is not None:
@@ -86,3 +104,11 @@ def meal_response(meal: Meal) -> MealResponse:
 
 def _escape_like(value: str) -> str:
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _search_terms(value: str) -> list[str]:
+    return [
+        term
+        for raw_term in _SEARCH_TERM.findall(value)
+        if len(term := raw_term.casefold()) >= 3 and term not in _SEARCH_STOP_WORDS
+    ]

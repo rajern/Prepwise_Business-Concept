@@ -47,4 +47,6 @@ prepwise-eval-assistant --baseline eval-results/<earlier-report>.json
 ```
 
 Reports include model/reasoning configuration plus SHA-256 fingerprints for the prompt and dataset.
-`--fail-under 0.90` makes the command return a failing exit code when the mean score is lower.
+`--fail-under 0.95 --min-pass-rate 0.95` makes the command fail when either the mean score or
+case pass rate is lower. A case passes at an overall score of at least 0.90, but workflow outcome
+and unwanted-side-effect scores must both be perfect.

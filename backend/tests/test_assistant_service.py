@@ -143,6 +143,8 @@ def test_service_calls_responses_api_with_safe_configuration() -> None:
     assert "explicitly asks" in call["instructions"]
     assert "call search_knowledge" in call["instructions"]
     assert "retrieved passages" in call["instructions"]
+    assert "short, specific English search query" in call["instructions"]
+    assert "Never choose subjective preferences" in call["instructions"]
     assert "two-request workflow" in call["instructions"]
 
 

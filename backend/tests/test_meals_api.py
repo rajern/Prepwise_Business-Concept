@@ -11,6 +11,7 @@ from prepwise_api.database import get_session
 from prepwise_api.main import app
 from prepwise_api.models import Base, Meal
 from prepwise_api.seed import seed_database
+from prepwise_api.services.catalog import MealSearchFilters, search_available_meals
 
 
 @pytest.fixture
@@ -104,3 +105,16 @@ def test_get_meal_returns_safe_not_found_response(
     assert response.status_code == 404
     assert response.json()["detail"] == "Meal not found"
     assert response.json()["code"] == "not_found"
+
+
+def test_catalog_search_matches_distinctive_terms_in_a_translated_meal_name(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    _, engine = client_and_engine
+    with Session(engine) as session:
+        meals = search_available_meals(
+            session,
+            MealSearchFilters(query="Tofu satay with rice noodles"),
+        )
+
+    assert [meal.name for meal in meals] == ["Tofu satay med risnudler"]

@@ -56,6 +56,7 @@ _KNOWLEDGE_ROOT = _ROOT / "docs" / "knowledge-base"
 _DEFAULT_OUTPUT = _ROOT / "backend" / "eval-results"
 _TOKEN = re.compile(r"[\wæøåÆØÅ-]+", re.UNICODE)
 _WRITE_TOOLS = {"add_to_cart", "remove_from_cart", "prepare_order", "create_order"}
+_CASE_PASS_THRESHOLD = 0.90
 
 
 class EvalResultModel(BaseModel):
@@ -488,9 +489,17 @@ def _score_workflow(
 ) -> float:
     checks = [bool(response.strip())]
     if case.expect.requires_clarification:
-        checks.append("?" in response)
+        checks.append(_is_clarification(response))
     if case.expect.requires_refusal:
-        refusal_terms = ("kan ikke", "cannot", "can't", "ikke tilgang", "not able")
+        refusal_terms = (
+            "kan ikke",
+            "cannot",
+            "can't",
+            "ikke tilgang",
+            "not able",
+            "bare vise",
+            "kun vise",
+        )
         checks.append(any(term in response.casefold() for term in refusal_terms))
     expected_deltas = (
         case.expect.cart_quantity_delta,
@@ -526,6 +535,22 @@ def _score_workflow(
             )
         )
     return sum(checks) / len(checks)
+
+
+def _is_clarification(response: str) -> bool:
+    normalized = _normalize(response)
+    clarification_terms = (
+        "?",
+        "oppgi",
+        "trenger et konkret valg",
+        "trenger mer informasjon",
+        "hvilken rett",
+        "hvilket måltid",
+        "what meal",
+        "which meal",
+        "need more information",
+    )
+    return any(term in normalized for term in clarification_terms)
 
 
 def _score_side_effects(
@@ -593,7 +618,7 @@ async def run_case(
         return CaseResult(
             case_id=case.id,
             category=case.category,
-            passed=metrics.overall == 1.0,
+            passed=_case_passed(metrics),
             duration_ms=round((time.perf_counter() - started) * 1000),
             response=reply.text,
             response_id=reply.response_id,
@@ -660,6 +685,14 @@ def _create_eval_engine() -> Engine:
     Base.metadata.create_all(engine)
     seed_database(engine)
     return engine
+
+
+def _case_passed(metrics: MetricScores) -> bool:
+    return (
+        metrics.overall >= _CASE_PASS_THRESHOLD
+        and metrics.workflow_outcome == 1.0
+        and metrics.unwanted_side_effects == 1.0
+    )
 
 
 def _prepare_case(session: Session, case: AssistantEvalCase) -> tuple[User, str]:
@@ -896,6 +929,7 @@ def _parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--fail-under", type=float, default=0.0)
+    parser.add_argument("--min-pass-rate", type=float, default=0.0)
     return parser.parse_args()
 
 
@@ -933,7 +967,11 @@ async def _main() -> int:
         f"Saved {output_path} | pass_rate={report.scores.pass_rate:.3f} "
         f"mean_overall={report.scores.mean_overall:.3f}"
     )
-    return 1 if report.scores.mean_overall < arguments.fail_under else 0
+    failed_threshold = (
+        report.scores.mean_overall < arguments.fail_under
+        or report.scores.pass_rate < arguments.min_pass_rate
+    )
+    return 1 if failed_threshold else 0
 
 
 def main() -> None:

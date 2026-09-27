@@ -856,7 +856,7 @@ Evaluate at least:
 
 ### T13.1 — Trace AI workflows
 
-**Status:** Complete
+**Status:** Complete — production verified
 
 Make it possible to inspect:
 

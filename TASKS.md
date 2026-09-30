@@ -14,6 +14,63 @@ For each task:
 * update this file when a task is completed
 * do not introduce new infrastructure or major dependencies without a clear need
 
+## Active automation queue
+
+This queue, not the historical milestone checklists below, controls unattended work.
+Only tasks marked **Ready** or an unblocked **In progress** may be implemented.
+Continue the active task only while it remains prioritized and its dependencies are satisfied.
+When blocked, record the precise question/action needed and select the next independent Ready task.
+If none exists, stop; do not invent tasks, repeat unchanged failures or reopen completed milestones.
+Only the main agent updates this queue. At most two subagents may work on disjoint subtasks.
+Never overwrite unrelated changes or start a second worker on an already claimed task.
+
+**Active task:** N2. **Next independent task:** N3.
+
+| Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
+| --- | --- | --- | --- | --- |
+| 1 / N1 | Prepare nightly queue and verify delivery access | Complete, 2026-09-30 | None | Clean baseline `6e33e57`; Git remote and push dry-run pass with approved network access; Azure login valid; existing CI/deploy successful; public frontend, health, bilingual meals, pickup windows and CORS checked. Scheduler and unattended permission limitations are documented below. |
+| 2 / N2 | Document and validate a code-only rollback runbook | Ready | N1 | Record the exact stable SHA and baseline health before release; document non-destructive revert/redeploy, verification, partial-deploy handling and stop conditions. Validate commands without actually reverting or deploying. No automatic rollback involving changed migrations, secrets or data. Use existing CI/CD and infrastructure, not a new framework. |
+| 3 / N3 | Verify production assistant runtime grants/configuration | Ready (read-only) | N1 | Verify current runtime identity has only the required privileges on the two quota tables, production auth mode and effective approved limits. Keep secret values entirely out of output/logs/files. Do not call the model or mutate production data/permissions. Missing access/privileges must be recorded as blocked, not bypassed. |
+| 4 / N4 | Evaluate the selected model with the new 800-token cap | Blocked: owner approval | N3 | Owner must approve a maximum spend/call count for live API evals. Use isolated test data; assess tool workflows, Norwegian/English, refusal/injection cases and incomplete responses. Existing offline tests do not establish live model quality. |
+| 5 / N5 | Approve one meal-image sample | Blocked: owner decision | None | Owner must approve visual style and the sample-generation method/budget before a paid image call. Do not generate the full image set before sample approval. |
+| 6 / N6 | Generate and integrate the complete meal-image set | Blocked: dependency | N5 | Approved matching images for each seeded meal, integrated and visually verified at mobile/desktop sizes. |
+
+### Nightly execution and release rules
+
+- The approved schedule is a daily follow-up in this chat at **01:00 Europe/Oslo**.
+  The computer must remain awake, the desktop app running, and the project available locally.
+  Automation `nattarbeid-prepwise` is **ACTIVE**, attached to this chat; creation and view confirmed.
+- Run one bounded approved task batch, test it, and update status/evidence/remaining questions.
+  Stop when the eligible queue is empty or when access requires human action.
+- Commit/push authorization covers only the automation's own verified changes. Never stage all
+  dirty files blindly, force-push, reset user work or change branch protections.
+- Existing `push main -> required CI -> production deployment -> smoke checks` is the delivery path.
+  Wait for the exact pushed SHA; report CI success, deploy success and public checks separately.
+  Code-only automatic rollback requires the completed N2 runbook and a known-good baseline.
+- Do not change secrets, perform destructive migrations or launch paid external API/image calls
+  without separate approval. A deployment can index changed knowledge documents with paid
+  embeddings: do not push a release that would trigger unapproved new AI work.
+- Use the current permission boundary; no unattended Full Access escalation or security bypass.
+  Read/write testing and network commands previously needed reviewed escalation. A successful
+  interactive dry-run does not prove that an unattended run has the same permissions.
+  If a scheduled command is denied, document it and stop/choose an independent permitted task.
+- Report meaningful completion, a new actionable blocker or failure; remain quiet when state
+  is unchanged and no approved work is available. Do not keep retrying an identical blocker.
+
+### Setup evidence (2026-09-30)
+
+The owner has already pushed round 1 as `6e33e579ee6d55be11555d26951f91d1f4702cfd`.
+[Production workflow 36693508361](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/36693508361)
+completed successfully. This setup did not push/deploy additional application changes.
+Non-mutating production probes passed for frontend/title, live/ready, 12 meals in both languages
+with translated names, five pickup dates/two windows, allowed frontend CORS and exposed Retry-After.
+The production revision observed was `ca-prepwise-prod--0000039`.
+These public probes do not establish authenticated assistant privileges or live model quality.
+GitHub CLI is not on PATH; public Actions REST status is readable, and Git uses existing credentials.
+Branch protection/environment approval details and unattended Git/network access remain unproven.
+The controlled setup run also passed frontend lint and all 36 frontend unit tests. Git push was
+dry-run only. Production probes and Azure inspection were read-only; no paid AI calls were made.
+
 ---
 
 # Milestone 1 — Production application
@@ -907,8 +964,12 @@ traces for structured writes and RAG.
 
 # Post-Milestone 2 — customer experience and usage controls
 
-**Status:** Round 1 implemented and verified locally, 2026-09-30; not deployed
-or production verified.
+**Status:** Round 1 implemented and verified locally; subsequently deployed by the owner,
+2026-09-30. Public production checks passed; authenticated AI verification remains open.
+
+**Delivery update, 2026-09-30:** Subsequently pushed/deployed by the owner as `6e33e57`;
+the production workflow and the non-mutating public checks above passed. Authenticated AI runtime
+verification and new live model evals remain separate open tasks (N3/N4).
 
 - Repository/configuration audit and targeted cleanup: completed locally; see
   [review evidence and live checks still outstanding](./docs/REPO_REVIEW.md).

@@ -24,16 +24,49 @@ If none exists, stop; do not invent tasks, repeat unchanged failures or reopen c
 Only the main agent updates this queue. At most two subagents may work on disjoint subtasks.
 Never overwrite unrelated changes or start a second worker on an already claimed task.
 
-**Active task:** N2. **Next independent task:** N3.
+**Active task:** N7 (replacement provisioned; deployment/retirement verification in progress).
+**Next independent task:** N6 (approved image style; implementation may follow round 2 delivery).
 
 | Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
 | --- | --- | --- | --- | --- |
 | 1 / N1 | Prepare nightly queue and verify delivery access | Complete, 2026-09-30 | None | Clean baseline `6e33e57`; Git remote and push dry-run pass with approved network access; Azure login valid; existing CI/deploy successful; public frontend, health, bilingual meals, pickup windows and CORS checked. Scheduler and unattended permission limitations are documented below. |
-| 2 / N2 | Document and validate a code-only rollback runbook | Ready | N1 | Record the exact stable SHA and baseline health before release; document non-destructive revert/redeploy, verification, partial-deploy handling and stop conditions. Validate commands without actually reverting or deploying. No automatic rollback involving changed migrations, secrets or data. Use existing CI/CD and infrastructure, not a new framework. |
-| 3 / N3 | Verify production assistant runtime grants/configuration | Ready (read-only) | N1 | Verify current runtime identity has only the required privileges on the two quota tables, production auth mode and effective approved limits. Keep secret values entirely out of output/logs/files. Do not call the model or mutate production data/permissions. Missing access/privileges must be recorded as blocked, not bypassed. |
-| 4 / N4 | Evaluate the selected model with the new 800-token cap | Blocked: owner approval | N3 | Owner must approve a maximum spend/call count for live API evals. Use isolated test data; assess tool workflows, Norwegian/English, refusal/injection cases and incomplete responses. Existing offline tests do not establish live model quality. |
-| 5 / N5 | Approve one meal-image sample | Blocked: owner decision | None | Owner must approve visual style and the sample-generation method/budget before a paid image call. Do not generate the full image set before sample approval. |
-| 6 / N6 | Generate and integrate the complete meal-image set | Blocked: dependency | N5 | Approved matching images for each seeded meal, integrated and visually verified at mobile/desktop sizes. |
+| 2 / N2 | Document and validate a code-only rollback runbook | Complete, 2026-09-30 | N1 | [ROLLBACK.md](docs/ROLLBACK.md) records exact baseline `5f80726`, fresh no-op preflight, ordinary revert/redeploy, partial-deploy handling and fail-closed stops. Commands validated read-only; no actual rollback/drill or automatic controller enabled. |
+| 3 / N3 | Verify production assistant runtime grants/configuration | Review complete; security finding open in N7 | N1 | [Production review](docs/PRODUCTION_AI_REVIEW.md): approved limits/auth, anonymous 401, scoped Key Vault bindings, TLS and migrations verified read-only. Runtime has needed quota DML but also `neon_superuser` and broad administrative attributes; least privilege is NOT satisfied. No production permissions/data changed. |
+| 3a / N7 | Remediate overprivileged production database runtime role | In progress, owner-approved 2026-09-30 | N3 | Dedicated restricted SQL-created login provisioned, exact grants and TLS checked; Key Vault/reference switched. Deployment and retiring the former privileged login remain. Owner approved controlled switch, recovery and commit/push/deploy. No blind inherited-grant revocation or business-row changes. |
+| 4 / N4 | Evaluate the selected model with the new 800-token cap | Complete bounded smoke, 2026-09-30 | N3 review | Owner approved max 10 attempts/USD 1. Exactly 10 calls, five synthetic isolated cases passed; estimated USD 0.041908, conservative reservation USD 0.353880. No production data or embeddings. Incomplete handling tested offline; no incomplete live response. [Evidence](docs/AI_EVAL_ROUND2.md). This approval is exhausted; no paid rerun/full eval without new approval. |
+| 5 / N5 | Approve one meal-image sample | Complete, owner-approved 2026-09-30 | None | Owner approved [chicken-teriyaki-v1.png](docs/image-samples/chicken-teriyaki-v1.png): realistic photo, natural light and neutral background. Reuse this sample in the final set. [Prompt and caveats](docs/image-samples/README.md). |
+| 6 / N6 | Generate and integrate the complete meal-image set | Ready after N7 delivery | N5, N7 delivery | Generate the remaining 11 matching meal images with the built-in image tool, reuse the sample, integrate and verify mobile/desktop. Use illustrative AI-image disclosure. No additional paid model evals or external image API fallback without separate approval. |
+
+### Round 2 delivery record — 2026-09-30
+
+- Rollback procedure and read-only production review completed; runtime privilege remediation
+  needs separate owner approval. Existing nightly runs must not alter roles/secrets or repeat
+  the exhausted live evaluation/image generation while the queue is blocked.
+- Live selected-model smoke: five cases passed using all ten approved model attempts; new
+  bounded runner preserves an ignored write-ahead journal and refuses accidental reruns.
+- One meal-image sample generated with the built-in tool and saved for owner review; no
+  catalogue/image URL changes, full image set, production mutations, commit or push in round 2.
+- Final local verification: 144 backend tests passed, four PostgreSQL integration tests skipped
+  (not rerun this round), Ruff lint/format and strict mypy passed. Changed/new text files passed
+  a redacted Gitleaks scan. Rollback PowerShell/Bash syntax and equivalent public production
+  probes passed; the local Bash smoke invocation lacks jq and is not claimed as a full pass.
+  No production authenticated customer session or full live RAG/eval suite was used by this round.
+
+### Approved round 2 closure / production delivery
+
+- Owner approved the sample, controlled DB-role switch and commit/push/deploy on 2026-09-30.
+- Provisioned the new SQL-created runtime login and exact grant map; read-only live inspection
+  verifies no administrative attributes/membership/schema CREATE or grant options, with TLS.
+  New Key Vault version/reference is in place; the former login remains available until the
+  replacement release is verified, then must be retired to prevent historical-version access.
+- Added repeatable deployment-time grant application through the migration owner, explicit
+  coverage for every ORM table, positive/negative isolated PostgreSQL service tests and operator
+  helpers that never emit credentials. Migration secrets and business rows were not changed.
+- Fixed a frontend cooldown race: Retry-After now updates the countdown and deadline together.
+- Pre-release verification: 150 backend tests passed with all six PostgreSQL integration tests;
+  the additional grant-map completeness test passed separately (151 total). Ruff/format/full
+  strict mypy passed. Frontend lint/types/build and all 36 tests passed after the cooldown fix.
+- Release SHA, CI/deploy and final login retirement will be recorded after verification.
 
 ### Nightly execution and release rules
 

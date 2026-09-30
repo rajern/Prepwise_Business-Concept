@@ -88,7 +88,9 @@ export function AssistantPanel({ accessToken, userId = null, onStateChange }: As
         if (reason.status === 401) text = t('Your session has expired. Sign in again.')
         if (reason.status === 429) {
           text = reason.code === 'request_in_progress' ? t('A message is already being processed. Please wait.') : t('You have reached the chat limit. Please try again later.')
-          setRetryAt(Date.now() + (reason.retryAfter ?? 30) * 1000)
+          const retrySeconds = reason.retryAfter ?? 30
+          setSecondsLeft(retrySeconds)
+          setRetryAt(Date.now() + retrySeconds * 1000)
         }
       }
       setError(text)

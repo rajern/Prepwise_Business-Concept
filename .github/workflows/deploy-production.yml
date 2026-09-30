@@ -102,6 +102,11 @@ jobs:
             --env APP_ENV=production \
             --env DATABASE_URL="$database_url" \
             "$BACKEND_IMAGE" \
+            python -m prepwise_api.runtime_permissions
+          docker run --rm \
+            --env APP_ENV=production \
+            --env DATABASE_URL="$database_url" \
+            "$BACKEND_IMAGE" \
             prepwise-seed-if-empty
           openai_api_key="$(az keyvault secret show \
             --vault-name "$KEY_VAULT_NAME" \

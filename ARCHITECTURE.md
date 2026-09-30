@@ -24,6 +24,13 @@ The cart is a navigation-controlled drawer backed by authoritative API state. Th
 chat is visible to guests but sending requires authentication. Tab-scoped conversation
 history is untrusted context; assistant mutations refresh cart/order state even after failure.
 
+Recipe illustrations are versioned WebP assets hosted by the frontend. Customer catalogue
+responses resolve frontend-relative paths only for known unchanged ingredient sets without
+writing to the database. Authored image URLs take precedence, admin responses expose the
+stored field, and changed/unknown recipes retain a placeholder. Cards/details disclose
+AI-generated illustrations in both languages; images are not evidence of nutrition/allergen
+safety. The frontend handles missing/failed images without losing meal controls.
+
 Next.js is intentionally not used. The application already has a separate Python backend and does not require SSR.
 
 ## Backend

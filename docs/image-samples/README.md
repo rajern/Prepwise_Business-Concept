@@ -56,8 +56,10 @@ of an actual food portion, nutritional value, ingredient absence or allergen saf
   Failed images use the existing accessible placeholder; missing production assets are 404s,
   not HTML from SPA navigation fallback.
 - These paths are hosted on the frontend origin, not a new API/static-file service. A backend-first
-  deploy may temporarily return new paths before the frontend upload; the placeholder handles
-  this gap. A rollback does not require a DB downgrade or business-data undo for this feature.
+  first rollout may temporarily return new paths before the frontend upload; the previous UI
+  does not have the new error fallback and can briefly show a failed image. The new UI handles
+  failed assets after upload; a fresh page load receives the new bundle. Do not claim atomic
+  frontend/backend deployment. A rollback needs no DB downgrade/business-data undo for this feature.
 - Creative Production guided consistent styling, exact recipe grounding and two-worker generation.
   Its review-board tool was not exposed directly in this environment; native files/chat plus
   direct visual inspection were used instead. No nested board call or external API fallback.

@@ -24,7 +24,7 @@ If none exists, stop; do not invent tasks, repeat unchanged failures or reopen c
 Only the main agent updates this queue. At most two subagents may work on disjoint subtasks.
 Never overwrite unrelated changes or start a second worker on an already claimed task.
 
-**Active task:** N6 (Ready, round 3). **Next independent task:** None.
+**Active task:** N6 (In progress, round 3 verification/delivery). **Next independent task:** None.
 Legacy-role cleanup N8 requires a Neon administrator; it does not block the approved image work.
 
 | Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
@@ -36,7 +36,35 @@ Legacy-role cleanup N8 requires a Neon administrator; it does not block the appr
 | 3b / N8 | Retire former privileged database login | Blocked: Neon administrator action | N7 | Migration credential received SQLSTATE 42501 at ALTER ROLE NOLOGIN; transaction rolled back, no bypass attempted. Owner/Neon role administrator must disable/rotate the former unused privileged login and end its sessions using an authorized control-plane/operator plan. Historical KV versions are disabled and recoverable; do not re-enable them for runtime. No repeated unattended attempts. |
 | 4 / N4 | Evaluate the selected model with the new 800-token cap | Complete bounded smoke, 2026-09-30 | N3 review | Owner approved max 10 attempts/USD 1. Exactly 10 calls, five synthetic isolated cases passed; estimated USD 0.041908, conservative reservation USD 0.353880. No production data or embeddings. Incomplete handling tested offline; no incomplete live response. [Evidence](docs/AI_EVAL_ROUND2.md). This approval is exhausted; no paid rerun/full eval without new approval. |
 | 5 / N5 | Approve one meal-image sample | Complete, owner-approved 2026-09-30 | None | Owner approved [chicken-teriyaki-v1.png](docs/image-samples/chicken-teriyaki-v1.png): realistic photo, natural light and neutral background. Reuse this sample in the final set. [Prompt and caveats](docs/image-samples/README.md). |
-| 6 / N6 | Generate and integrate the complete meal-image set | Ready | N5, N7 delivery | Generate the remaining 11 matching meal images with the built-in image tool, reuse the sample, integrate and verify mobile/desktop. Use illustrative AI-image disclosure. No additional paid model evals or external image API fallback without separate approval. |
+| 6 / N6 | Generate and integrate the complete meal-image set | In progress: generated/integrated, delivery pending | N5, N7 delivery | Eleven native first-attempt images plus reused approved sample; versioned 960 × 720 WebPs, recipe-guarded presentation fallback and NO/EN AI disclosure. Local verification and exact release CI/deploy/public checks must pass before completion. No additional paid model evals or external image API fallback without separate approval. |
+
+### Round 3 implementation — 2026-09-30
+
+- Owner authorized round 3 after sample approval and round 2 push/deploy. Two workers generated
+  disjoint sets (5 + 6), all eleven first attempts accepted. No external image API, regeneration,
+  paid model evaluation or knowledge-index update was initiated.
+- Reused the approved teriyaki sample. Inspected all twelve encoded images; shipped 960 × 720
+  WebPs total 1,248,192 bytes (81–130 kB each), not 28 MB of source PNGs. Removed only eleven
+  temporary generated source copies from the public folder; native originals remain recoverable
+  at the documented paths. [Prompts, provenance and image caveats](docs/image-samples/README.md).
+- Published image paths are derived read-only for known unchanged ingredient sets. Authored
+  image URLs and admin fields are preserved; unknown/changed recipes retain the placeholder.
+  No DB migration, production catalogue reseed/backfill or business-data write is required.
+- Responsive 4:3 cards/details have NO/EN illustrative AI disclosure and alternative text,
+  lazy card/eager detail loading and accessible failure placeholders. SWA excludes `/images/*`
+  from HTML fallback. The production smoke script checks returned image paths/content/size
+  and a real missing-asset 404; the local Vite fallback is intentionally not used as SWA evidence.
+- Pre-release backend: all 153 tests passed with six live local PostgreSQL cases; image/config
+  checks passed separately after the final test-only adjustment. Ruff lint/format/full mypy pass.
+  Complete-history scan (61 commits), new/changed source scans and smoke-shell syntax pass.
+- Fresh read-only production preflight: TLS, restricted runtime attributes/grants and separate
+  migration identity verified; knowledge metadata matches all 12 local chunks/model exactly.
+  No knowledge document, migration, role or secret changes in this release. N8 remains blocked
+  on the authorized Neon administrator, not retried or described as resolved.
+- Final frontend lint/types/build and all 41 unit tests passed. All seven real local browser
+  tests passed, including every image at desktop/mobile widths, bilingual disclosure/details,
+  checkout/admin authorization and assistant-cart refresh. Inspected desktop/mobile screenshots.
+  Exact release CI/deploy/public evidence pending.
 
 ### Round 2 delivery record — 2026-09-30
 

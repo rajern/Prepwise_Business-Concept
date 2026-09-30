@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from prepwise_api.meal_images import catalogue_image_url
 from prepwise_api.models import Ingredient, Meal
 from prepwise_api.schemas import AllergenResponse, MealDetailResponse, MealResponse
 from prepwise_api.services import ApplicationNotFoundError
@@ -115,12 +116,14 @@ def get_meal_details(
     )
 
 
-def meal_response(meal: Meal, *, lang: Language = "no") -> MealResponse:
+def meal_response(
+    meal: Meal, *, lang: Language = "no", include_artwork: bool = True
+) -> MealResponse:
     return MealResponse(
         id=meal.id,
         name=localized(meal.name, meal.name_en, lang),
         description=localized(meal.description, meal.description_en, lang),
-        image_url=meal.image_url,
+        image_url=catalogue_image_url(meal) if include_artwork else meal.image_url,
         price_nok=meal.price_nok,
         calories=meal.calories,
         protein_grams=meal.protein_grams,

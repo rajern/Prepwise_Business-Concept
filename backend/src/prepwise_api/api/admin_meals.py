@@ -191,7 +191,7 @@ def _load_meal(session: Session, meal_id: UUID) -> Meal | None:
 
 def _admin_meal_response(meal: Meal) -> MealAdminResponse:
     return MealAdminResponse(
-        **meal_response(meal).model_dump(),
+        **meal_response(meal, include_artwork=False).model_dump(),
         available=meal.available,
         name_en=meal.name_en,
         description_en=meal.description_en,

@@ -81,6 +81,8 @@ const norwegian: Record<string, string> = {
   'Fat': 'Fett',
   'Prepwise kitchen': 'Prepwise-kjøkkenet',
   'No image available for': 'Bilde mangler for',
+  'AI-generated illustration': 'AI-generert illustrasjon',
+  'AI-generated illustration. Actual presentation may vary.': 'AI-generert illustrasjon. Anretningen kan variere.',
   'AI assistant': 'AI-assistent',
   'Ask Prepwise': 'Spør Prepwise',
   'Open chat': 'Åpne chat',

@@ -32,6 +32,7 @@ import { AuthControls } from './auth/AuthControls'
 import { fetchPickupOptions, type PickupOptions } from './api/pickupOptions'
 import { LanguageProvider, useLanguage, formatNok, formatPickup } from './i18n'
 import { CartDrawer } from './components/CartDrawer'
+import { MealArtwork } from './components/MealArtwork'
 
 type CatalogueFilter = 'all' | 'high-protein' | 'under-600'
 
@@ -1063,31 +1064,6 @@ function formatOrderStatus(status: OrderSummary['status']): string {
     .split('_')
     .map((part) => part[0].toUpperCase() + part.slice(1))
     .join(' ')
-}
-
-function MealArtwork({ meal, detail = false }: { meal: Meal; detail?: boolean }) {
-  const { t } = useLanguage()
-  if (meal.image_url) {
-    return (
-      <img
-        className={`meal-artwork ${detail ? 'meal-artwork--detail' : ''}`}
-        src={meal.image_url}
-        alt={meal.name}
-      />
-    )
-  }
-
-  return (
-    <div
-      className={`meal-artwork meal-artwork--placeholder ${
-        detail ? 'meal-artwork--detail' : ''
-      }`}
-      role="img"
-      aria-label={`${t('No image available for')} ${meal.name}`}
-    >
-      <span>{t('Prepwise kitchen')}</span>
-    </div>
-  )
 }
 
 function Nutrition({ meal }: { meal: Meal }) {

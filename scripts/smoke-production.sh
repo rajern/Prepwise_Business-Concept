@@ -59,6 +59,27 @@ meal_id="$(jq --raw-output '.[0].id' "$temporary_directory/meals.json")"
 curl "${curl_retry[@]}" "$backend_url/api/meals/$meal_id" |
   jq --exit-status --arg meal_id "$meal_id" '.id == $meal_id and .available == true' >/dev/null
 
+echo "Checking versioned meal illustrations on the frontend origin"
+jq --raw-output '.[].image_url | select(type == "string") | select(test("^/images/meals/[a-z-]+-v1[.]webp$"))' \
+  "$temporary_directory/meals.json" | sort --unique > "$temporary_directory/image-paths"
+while IFS= read -r image_path; do
+  curl "${curl_retry[@]}" \
+    --dump-header "$temporary_directory/image-headers" \
+    --output "$temporary_directory/image.webp" "$frontend_url$image_path"
+  grep --extended-regexp --ignore-case '^content-type: image/webp' \
+    "$temporary_directory/image-headers" >/dev/null
+  python - "$temporary_directory/image.webp" <<'PY'
+import pathlib
+import sys
+image = pathlib.Path(sys.argv[1]).read_bytes()
+assert image[:4] == b"RIFF" and image[8:12] == b"WEBP", "Invalid WebP response"
+assert 10_000 < len(image) < 300_000, "Invalid illustration size"
+PY
+done < "$temporary_directory/image-paths"
+missing_status="$(curl --silent --show-error --proto '=https' --tlsv1.2 \
+  --output /dev/null --write-out '%{http_code}' "$frontend_url/images/meals/nonexistent.webp")"
+[[ "$missing_status" == 404 ]] || { echo "Missing illustration did not return 404" >&2; exit 1; }
+
 echo "Checking production browser CORS policy"
 curl "${curl_retry[@]}" \
   --dump-header "$temporary_directory/cors-headers" \

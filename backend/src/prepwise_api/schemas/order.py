@@ -1,16 +1,19 @@
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from prepwise_api.models import OrderStatus
+from prepwise_api.schemas.pickup import PickupSlot
 
 
 class OrderCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     pickup_location_id: UUID
+    pickup_date: date
+    pickup_slot: PickupSlot
 
 
 class OrderSummaryResponse(BaseModel):

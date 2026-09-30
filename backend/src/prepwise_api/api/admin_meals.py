@@ -17,12 +17,13 @@ from prepwise_api.models import (
     meal_ingredients,
 )
 from prepwise_api.schemas import AllergenResponse, MealAdminWrite, MealDetailResponse
+from prepwise_api.schemas.meal import MealAdminResponse
 from prepwise_api.services.catalog import meal_response
 
 router = APIRouter(prefix="/api/admin/meals", tags=["admin meals"])
 
 
-@router.get("", response_model=list[MealDetailResponse])
+@router.get("", response_model=list[MealAdminResponse])
 def list_admin_meals(
     _: Annotated[User, Depends(require_admin)],
     session: Annotated[Session, Depends(get_session)],
@@ -46,7 +47,7 @@ def list_admin_allergens(
     return [AllergenResponse(code=item.code, name=item.name) for item in allergens]
 
 
-@router.post("", response_model=MealDetailResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=MealAdminResponse, status_code=status.HTTP_201_CREATED)
 def create_admin_meal(
     payload: MealAdminWrite,
     _: Annotated[User, Depends(require_admin)],
@@ -57,7 +58,7 @@ def create_admin_meal(
     return _save_meal(session, meal, payload)
 
 
-@router.patch("/{meal_id}", response_model=MealDetailResponse)
+@router.patch("/{meal_id}", response_model=MealAdminResponse)
 def update_admin_meal(
     meal_id: UUID,
     payload: MealAdminWrite,
@@ -78,6 +79,23 @@ def _save_meal(
 ) -> MealDetailResponse:
     try:
         allergens = _resolve_allergens(session, payload.allergen_codes)
+        if payload.ingredients_en is not None and len(payload.ingredients_en) != len(
+            payload.ingredients
+        ):
+            raise HTTPException(
+                status_code=422, detail="Ingredient translations must match ingredients"
+            )
+        if meal.name != payload.name and "name_en" not in payload.model_fields_set:
+            meal.name_en = None
+        if (
+            meal.description != payload.description
+            and "description_en" not in payload.model_fields_set
+        ):
+            meal.description_en = None
+        if "name_en" in payload.model_fields_set:
+            meal.name_en = payload.name_en
+        if "description_en" in payload.model_fields_set:
+            meal.description_en = payload.description_en
         meal.name = payload.name
         meal.description = payload.description
         meal.image_url = str(payload.image_url) if payload.image_url else None
@@ -89,6 +107,9 @@ def _save_meal(
         meal.available = payload.available
         session.add(meal)
         ingredients = _resolve_ingredients(session, payload.ingredients)
+        if payload.ingredients_en is not None:
+            for ingredient, translation in zip(ingredients, payload.ingredients_en, strict=True):
+                ingredient.name_en = translation
         session.flush()
 
         session.execute(delete(meal_ingredients).where(meal_ingredients.c.meal_id == meal.id))
@@ -168,8 +189,11 @@ def _load_meal(session: Session, meal_id: UUID) -> Meal | None:
     )
 
 
-def _admin_meal_response(meal: Meal) -> MealDetailResponse:
-    return MealDetailResponse(
+def _admin_meal_response(meal: Meal) -> MealAdminResponse:
+    return MealAdminResponse(
         **meal_response(meal).model_dump(),
         available=meal.available,
+        name_en=meal.name_en,
+        description_en=meal.description_en,
+        ingredients_en=[item.name_en for item in meal.ingredients],
     )

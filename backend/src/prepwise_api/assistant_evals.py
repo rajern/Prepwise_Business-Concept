@@ -21,6 +21,7 @@ ToolName = Literal[
     "remove_from_cart",
     "get_user_orders",
     "get_pickup_locations",
+    "get_pickup_options",
     "prepare_order",
     "create_order",
     "search_knowledge",

@@ -11,9 +11,10 @@ from prepwise_api.services import (
     ApplicationNotFoundError,
     ApplicationValidationError,
 )
+from prepwise_api.services.localization import Language, localized
 
 
-def get_user_cart(session: Session, user_id: UUID) -> CartResponse:
+def get_user_cart(session: Session, user_id: UUID, *, lang: Language = "no") -> CartResponse:
     items = session.scalars(
         select(CartItem)
         .options(joinedload(CartItem.meal))
@@ -27,7 +28,7 @@ def get_user_cart(session: Session, user_id: UUID) -> CartResponse:
             line_total_nok=item.meal.price_nok * item.quantity,
             meal=CartMealResponse(
                 id=item.meal.id,
-                name=item.meal.name,
+                name=localized(item.meal.name, item.meal.name_en, lang),
                 image_url=item.meal.image_url,
                 price_nok=item.meal.price_nok,
                 available=item.meal.available,
@@ -50,6 +51,8 @@ def add_user_cart_item(
     user_id: UUID,
     meal_id: UUID,
     quantity: int,
+    *,
+    lang: Language = "no",
 ) -> CartResponse:
     if not 1 <= quantity <= 99:
         raise ApplicationValidationError("Cart item quantity must be between 1 and 99")
@@ -75,7 +78,7 @@ def add_user_cart_item(
         item.quantity = new_quantity
 
     session.commit()
-    return get_user_cart(session, user_id)
+    return get_user_cart(session, user_id, lang=lang)
 
 
 def set_user_cart_item_quantity(
@@ -83,6 +86,8 @@ def set_user_cart_item_quantity(
     user_id: UUID,
     item_id: UUID,
     quantity: int,
+    *,
+    lang: Language = "no",
 ) -> CartResponse:
     if not 1 <= quantity <= 99:
         raise ApplicationValidationError("Cart item quantity must be between 1 and 99")
@@ -99,13 +104,15 @@ def set_user_cart_item_quantity(
 
     item.quantity = quantity
     session.commit()
-    return get_user_cart(session, user_id)
+    return get_user_cart(session, user_id, lang=lang)
 
 
 def remove_user_cart_item(
     session: Session,
     user_id: UUID,
     item_id: UUID,
+    *,
+    lang: Language = "no",
 ) -> CartResponse:
     item = session.scalar(
         select(CartItem).where(CartItem.id == item_id, CartItem.user_id == user_id)
@@ -115,4 +122,4 @@ def remove_user_cart_item(
 
     session.delete(item)
     session.commit()
-    return get_user_cart(session, user_id)
+    return get_user_cart(session, user_id, lang=lang)

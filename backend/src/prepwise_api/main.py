@@ -46,7 +46,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["*"],
-    expose_headers=[REQUEST_ID_HEADER],
+    expose_headers=[REQUEST_ID_HEADER, "Retry-After"],
 )
 app.include_router(meals_router)
 app.include_router(assistant_router)

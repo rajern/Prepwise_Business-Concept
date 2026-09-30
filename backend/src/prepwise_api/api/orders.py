@@ -11,6 +11,7 @@ from prepwise_api.database import get_session
 from prepwise_api.models import User
 from prepwise_api.schemas import OrderCreate, OrderDetailResponse, OrderSummaryResponse
 from prepwise_api.services import ApplicationServiceError
+from prepwise_api.services.localization import Language
 from prepwise_api.services.orders import (
     create_user_order,
     get_user_order,
@@ -26,10 +27,18 @@ def create_order(
     payload: OrderCreate,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
 ) -> OrderDetailResponse:
     """Create an order and clear the cart in one database transaction."""
     try:
-        created_order = create_user_order(session, user.id, payload.pickup_location_id)
+        created_order = create_user_order(
+            session,
+            user.id,
+            payload.pickup_location_id,
+            pickup_date=payload.pickup_date,
+            pickup_slot=payload.pickup_slot,
+            lang=lang,
+        )
     except ApplicationServiceError as error:
         raise_service_http_error(error)
     logger.info(
@@ -48,6 +57,7 @@ def create_order(
 def list_orders(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
 ) -> list[OrderSummaryResponse]:
     """Return only the authenticated user's orders, newest first."""
     return list_user_orders(session, user.id)
@@ -58,9 +68,10 @@ def get_order(
     order_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
 ) -> OrderDetailResponse:
     """Return an owned order without revealing another user's order."""
     try:
-        return get_user_order(session, user.id, order_id)
+        return get_user_order(session, user.id, order_id, lang=lang)
     except ApplicationServiceError as error:
         raise_service_http_error(error)

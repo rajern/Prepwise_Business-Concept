@@ -43,6 +43,7 @@ function getE2ESession(): {
   }
 
   const role = new URLSearchParams(window.location.search).get('__e2e_role')
+  if (role === 'guest') return null
   if (role !== 'customer' && role !== 'admin') {
     throw new Error('The E2E test session requires a customer or admin role')
   }

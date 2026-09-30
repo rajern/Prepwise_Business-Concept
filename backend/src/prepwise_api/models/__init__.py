@@ -1,4 +1,5 @@
 from prepwise_api.models.assistant import OrderConfirmation
+from prepwise_api.models.assistant_usage import AssistantQuotaLock, AssistantUsageEvent
 from prepwise_api.models.base import Base
 from prepwise_api.models.cart import CartItem
 from prepwise_api.models.catalog import (
@@ -16,6 +17,8 @@ from prepwise_api.models.user import User
 
 __all__ = [
     "Allergen",
+    "AssistantQuotaLock",
+    "AssistantUsageEvent",
     "Base",
     "CartItem",
     "Ingredient",

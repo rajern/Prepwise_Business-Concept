@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=75", "wheel"]
+requires = ["setuptools>=83,<84", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,6 +11,8 @@ dependencies = [
     "alembic>=1.14,<2.0",
     "azure-monitor-opentelemetry>=1.8,<2.0",
     "fastapi>=0.115,<1.0",
+    # Azure telemetry pulls OAuthlib transitively; keep its PKCE security fix.
+    "oauthlib>=4.0,<5.0",
     "openai>=2.0,<3.0",
     "opentelemetry-instrumentation-sqlalchemy>=0.60b0,<1.0",
     "pgvector>=0.4,<1.0",

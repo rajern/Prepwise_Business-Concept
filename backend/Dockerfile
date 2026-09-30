@@ -13,7 +13,8 @@ COPY src ./src
 COPY alembic.ini ./
 COPY migrations ./migrations
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir "pip>=26.2,<27" "setuptools>=83,<84" \
+    && pip install --no-cache-dir .
 
 USER prepwise
 

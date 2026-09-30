@@ -36,6 +36,24 @@ jobs:
     name: Backend quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      APP_ENV: test
+      # Disposable job-local database; never connect tests to Neon.
+      PREPWISE_TEST_DATABASE_URL: postgresql+psycopg://prepwise:change-me@localhost:5432/prepwise_ci
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg16-trixie
+        env:
+          POSTGRES_DB: prepwise_ci
+          POSTGRES_USER: prepwise
+          POSTGRES_PASSWORD: change-me
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prepwise -d prepwise_ci"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: backend
@@ -62,6 +80,9 @@ jobs:
 
       - name: Type-check backend
         run: python -m mypy .
+
+      - name: Apply migrations to disposable PostgreSQL
+        run: DATABASE_URL="$PREPWISE_TEST_DATABASE_URL" python -m alembic upgrade head
 
       - name: Test backend
         run: python -m pytest

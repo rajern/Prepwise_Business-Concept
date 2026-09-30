@@ -1,6 +1,10 @@
+from datetime import date, datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+PickupSlot = Literal["16-18", "18-20"]
 
 
 class PickupLocationResponse(BaseModel):
@@ -9,6 +13,22 @@ class PickupLocationResponse(BaseModel):
     address_line: str
     postal_code: str
     city: str
+
+
+class PickupSlotResponse(BaseModel):
+    id: PickupSlot
+    start_at: datetime
+    end_at: datetime
+
+
+class PickupDayResponse(BaseModel):
+    date: date
+    slots: list[PickupSlotResponse]
+
+
+class PickupOptionsResponse(BaseModel):
+    timezone: str
+    days: list[PickupDayResponse]
 
 
 class PickupLocationAdminResponse(PickupLocationResponse):

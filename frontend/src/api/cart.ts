@@ -1,5 +1,6 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
+import type { Language } from '../i18n'
 
 export interface CartMeal {
   id: string
@@ -25,15 +26,17 @@ export interface Cart {
 export async function fetchCart(
   accessToken: string,
   signal?: AbortSignal,
+  language: Language = 'no',
 ): Promise<Cart> {
-  return cartRequest('/api/cart', accessToken, { signal })
+  return cartRequest(`/api/cart?lang=${language}`, accessToken, { signal })
 }
 
 export async function addCartItem(
   accessToken: string,
   mealId: string,
+  language: Language = 'no',
 ): Promise<Cart> {
-  return cartRequest('/api/cart/items', accessToken, {
+  return cartRequest(`/api/cart/items?lang=${language}`, accessToken, {
     method: 'POST',
     body: JSON.stringify({ meal_id: mealId, quantity: 1 }),
   })
@@ -43,8 +46,9 @@ export async function updateCartItem(
   accessToken: string,
   itemId: string,
   quantity: number,
+  language: Language = 'no',
 ): Promise<Cart> {
-  return cartRequest(`/api/cart/items/${itemId}`, accessToken, {
+  return cartRequest(`/api/cart/items/${itemId}?lang=${language}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify({ quantity }),
   })

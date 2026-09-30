@@ -105,7 +105,7 @@ describe('AuthControls', () => {
     )
 
     expect(
-      await screen.findByText('Signed in · API access ready · customer'),
+      await screen.findByText('Signed in'),
     ).toBeInTheDocument()
     expect(acquireTokenSilent).toHaveBeenCalledWith({
       account,

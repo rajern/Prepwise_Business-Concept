@@ -6,6 +6,8 @@ from prepwise_api.models import Base, Meal, OrderItem
 
 EXPECTED_TABLES = {
     "allergens",
+    "assistant_quota_lock",
+    "assistant_usage_events",
     "cart_items",
     "ingredients",
     "knowledge_chunks",

@@ -905,6 +905,34 @@ traces for structured writes and RAG.
 
 ---
 
+# Post-Milestone 2 — customer experience and usage controls
+
+**Status:** Round 1 implemented and verified locally, 2026-09-30; not deployed
+or production verified.
+
+- Repository/configuration audit and targeted cleanup: completed locally; see
+  [review evidence and live checks still outstanding](./docs/REPO_REVIEW.md).
+- Implemented Norwegian-default customer UI and English switch, including persisted meal translations.
+- Implemented cart side panel, feedback, quantity badge and refresh after assistant actions.
+- Implemented validated pickup date/window selection: tomorrow through the next five calendar days,
+  all weekdays, `16:00–18:00` or `18:00–20:00`, in `Europe/Oslo`.
+- Implemented floating authenticated chat with current-tab history and guest sign-in prompt.
+- Implemented backend AI usage limits: 15/10 minutes/user, 45/day/user, 100/day/application, one active
+  request/user; bounded workflow and Prepwise-only scope. See [agent security](./docs/AGENT_SECURITY.md).
+- Implemented bilingual portfolio footer with approved name, LinkedIn, email and verified source link.
+- Remediated the three installed backend dependency audit findings; fresh local audit is clean.
+- Local verification passed: 135 backend tests (including two PostgreSQL quota race tests and
+  two PostgreSQL order/confirmation tests), 36 frontend tests and six Chromium E2E tests.
+  Backend formatting/lint/strict types, frontend lint/types/production build, Docker build
+  and Bicep compilation passed. Mobile chat/cart layout was also inspected.
+- Live selected-model evals and production configuration/grants still need fresh verification.
+  No paid model calls, deployment or commit were performed in this round.
+
+Later rounds retain the meal-image style approval, full image set, production validation and
+any follow-up fixes. Historical milestone verification above applies to the previous release.
+
+---
+
 # Deferred
 
 Do not implement unless a concrete requirement appears:

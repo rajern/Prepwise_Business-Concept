@@ -25,3 +25,5 @@ class OrderConfirmation(UuidPrimaryKeyMixin, TimestampMixin, Base):
     issued_request_id: Mapped[str] = mapped_column(String(100))
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pickup_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    pickup_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

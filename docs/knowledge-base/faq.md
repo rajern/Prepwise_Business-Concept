@@ -2,15 +2,25 @@
 
 ## What is Prepwise?
 
-Prepwise is a meal-prep service for people in Oslo who want convenient prepared meals with clear nutritional information.
+Prepwise is a portfolio demonstration of a meal-prep ordering service for people in Oslo.
+It is not a commercial meal service and does not fulfil real meal orders.
 
 ## How does ordering work?
 
-Browse the available meals, add meals to your cart, choose a pickup location, and place your order.
+Browse the available meals, sign in, add meals to your cart, open the cart from the top navigation,
+and choose a pickup location, date and time window before placing a demonstration order.
+The next five days, starting tomorrow, are available with 16:00–18:00 or 18:00–20:00 windows
+in Europe/Oslo. There is no automatic same-day booking.
 
 ## Do I need an account?
 
-You can browse meals without an account, but you need to sign in before placing an order.
+You can browse meals and open the assistant without an account, but you need to sign in to
+manage a cart, place an order or send an assistant message.
+
+## Can I switch language?
+
+The customer site defaults to Norwegian. Use the NO / EN control in the top navigation to
+switch the customer interface, meal information and assistant response language.
 
 ## Does Prepwise offer subscriptions?
 

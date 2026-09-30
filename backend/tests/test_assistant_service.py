@@ -135,7 +135,8 @@ def test_service_calls_responses_api_with_safe_configuration() -> None:
     assert call["input"] == [{"role": "user", "content": "Hello"}]
     assert call["tool_choice"] == "auto"
     assert call["parallel_tool_calls"] is False
-    assert len(list(call["tools"])) == 10
+    assert len(list(call["tools"])) == 11
+    assert call["max_output_tokens"] == 800
     assert call["store"] is False
     assert call["extra_headers"] == {"X-Client-Request-Id": "request-123"}
     assert "Prepwise" in call["instructions"]
@@ -160,7 +161,7 @@ def test_service_executes_function_call_and_returns_grounded_follow_up() -> None
         model="gpt-5.6-terra",
         output_text="",
         output=[function_call],
-        usage=None,
+        usage=SimpleNamespace(input_tokens=100, output_tokens=20),
         _request_id="req_tools",
     )
     final_response = SimpleNamespace(
@@ -226,7 +227,7 @@ def test_service_uses_retrieval_for_unstructured_guidance() -> None:
         model="gpt-5.6-terra",
         output_text="",
         output=[function_call],
-        usage=None,
+        usage=SimpleNamespace(input_tokens=100, output_tokens=20),
         _request_id="req_knowledge",
     )
     final_response = SimpleNamespace(
@@ -284,7 +285,7 @@ def test_service_stops_an_unbounded_tool_loop() -> None:
                     call_id=f"call_{index}",
                 )
             ],
-            usage=None,
+            usage=SimpleNamespace(input_tokens=100, output_tokens=20),
             _request_id=f"req_{index}",
         )
         for index in range(17)
@@ -310,7 +311,7 @@ def test_service_stops_an_unbounded_tool_loop() -> None:
     else:
         raise AssertionError("Expected AssistantUnavailableError")
 
-    assert create.await_count == 17
+    assert create.await_count == 11
 
 
 def test_service_maps_provider_timeout() -> None:
@@ -333,6 +334,7 @@ def test_service_maps_provider_timeout() -> None:
         pass
     else:
         raise AssertionError("Expected AssistantTimeoutError")
+    assert create.await_count == 2  # One initial attempt plus one bounded retry.
 
 
 def test_service_traces_workflow_model_and_tool_steps_without_content(
@@ -413,3 +415,103 @@ def test_service_traces_workflow_model_and_tool_steps_without_content(
     assert "min_protein_grams" not in serialized_trace
     assert "Protein Bowl has 45 g protein" not in serialized_trace
     provider.shutdown()
+
+
+def test_budget_prevents_call_when_initial_input_cannot_fit() -> None:
+    create = AsyncMock()
+    service = AssistantService(
+        Settings(openai_api_key=SecretStr("test-key"), assistant_max_total_tokens=1000),
+        cast(AsyncOpenAI, SimpleNamespace(responses=SimpleNamespace(create=create))),
+    )
+    with pytest.raises(AssistantUnavailableError):
+        asyncio.run(
+            service.respond(message="Find meals", request_id="budget", tool_context=_tool_context())
+        )
+    create.assert_not_awaited()
+
+
+def test_missing_usage_or_incomplete_response_fails_before_tools() -> None:
+    for usage, status in [
+        (None, "completed"),
+        (SimpleNamespace(input_tokens=100, output_tokens=800), "incomplete"),
+    ]:
+        registry = RecordingToolRegistry()
+        response = SimpleNamespace(
+            id="resp",
+            model="gpt-5.6-terra",
+            output_text="Partial output",
+            output=[
+                ResponseFunctionToolCall(
+                    type="function_call", name="search_meals", arguments="{}", call_id="one"
+                )
+            ],
+            usage=usage,
+            status=status,
+        )
+        service = AssistantService(
+            Settings(openai_api_key=SecretStr("test-key")),
+            cast(
+                AsyncOpenAI,
+                SimpleNamespace(responses=SimpleNamespace(create=AsyncMock(return_value=response))),
+            ),
+            registry,
+        )
+        with pytest.raises(AssistantUnavailableError):
+            asyncio.run(
+                service.respond(
+                    message="Find meals", request_id="budget", tool_context=_tool_context()
+                )
+            )
+        assert registry.calls == []
+
+
+def test_total_workflow_deadline_cancels_slow_provider() -> None:
+    async def slow_provider(**kwargs: object) -> None:
+        await asyncio.sleep(1)
+
+    create = AsyncMock(side_effect=slow_provider)
+    service = AssistantService(
+        Settings(openai_api_key=SecretStr("test-key"), assistant_workflow_timeout_seconds=0.01),
+        cast(AsyncOpenAI, SimpleNamespace(responses=SimpleNamespace(create=create))),
+    )
+    with pytest.raises(AssistantTimeoutError):
+        asyncio.run(
+            service.respond(
+                message="Find meals", request_id="deadline", tool_context=_tool_context()
+            )
+        )
+    assert create.await_count == 1
+
+
+def test_executed_write_limit_stops_seventh_write() -> None:
+    registry = RecordingToolRegistry()
+    responses = [
+        SimpleNamespace(
+            id=f"resp_{index}",
+            model="gpt-5.6-terra",
+            output_text="",
+            output=[
+                ResponseFunctionToolCall(
+                    type="function_call",
+                    name="add_to_cart",
+                    arguments="{}",
+                    call_id=f"call_{index}",
+                )
+            ],
+            usage=SimpleNamespace(input_tokens=100, output_tokens=20),
+        )
+        for index in range(7)
+    ]
+    service = AssistantService(
+        Settings(openai_api_key=SecretStr("test-key")),
+        cast(
+            AsyncOpenAI,
+            SimpleNamespace(responses=SimpleNamespace(create=AsyncMock(side_effect=responses))),
+        ),
+        registry,
+    )
+    with pytest.raises(AssistantUnavailableError):
+        asyncio.run(
+            service.respond(message="Add meals", request_id="writes", tool_context=_tool_context())
+        )
+    assert len(registry.calls) == 6

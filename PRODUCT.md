@@ -28,7 +28,7 @@ Prepwise allows users to browse ready-made meals, select what fits their needs a
 
 The main customer journey is:
 
-`browse meals → view meal details → add to cart → sign up / log in → choose pickup location → checkout → view order`
+`browse meals → sign up / log in → add to cart → open cart → choose pickup location/date/window → checkout → view order`
 
 Users can:
 
@@ -37,6 +37,7 @@ Users can:
 * create an account and log in
 * maintain a persistent shopping cart
 * choose from multiple pickup locations in Oslo
+* choose a pickup date and time window
 * place an order without real payment processing
 * view previous orders and order details
 * see the current status of an order
@@ -66,6 +67,22 @@ Individual meal customisation is not part of the MVP.
 Orders are collected from predefined pickup locations in Oslo.
 
 The MVP supports multiple pickup locations but no home delivery, route planning or delivery logistics.
+
+The post-Milestone 2 flow offers the next five calendar days beginning tomorrow, including
+weekends, with `16:00–18:00` and `18:00–20:00` windows in `Europe/Oslo`. The selected date and
+window must appear consistently in checkout, confirmations, customer order history and admin.
+
+## Customer language and assistance
+
+Norwegian is the default customer language, with an explicit Norwegian/English switch.
+Meal names, descriptions, ingredients and allergens follow that choice. Admin remains English.
+
+A cart button in the top navigation opens a side panel and displays the current quantity.
+Adding an item gives a brief confirmation without automatically scrolling the page.
+
+A floating assistant button is visible to guests, while sending messages requires sign-in.
+The conversation is retained only in the current tab and cleared on logout. Assistant cart
+changes are reflected without a full page refresh.
 
 ## Orders
 

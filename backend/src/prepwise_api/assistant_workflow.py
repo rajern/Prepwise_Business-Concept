@@ -51,8 +51,9 @@ class AssistantWorkflowState:
         output: str,
         *,
         operation: AssistantToolOperation = AssistantToolOperation.READ,
+        executed: bool = True,
     ) -> None:
-        if operation is AssistantToolOperation.WRITE:
+        if executed and operation is AssistantToolOperation.WRITE:
             self.write_call_count += 1
         succeeded = _tool_result_succeeded(output)
         if not succeeded:

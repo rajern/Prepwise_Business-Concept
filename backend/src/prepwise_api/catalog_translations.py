@@ -1,0 +1,117 @@
+"""Authored English content for the Norwegian demo catalogue."""
+
+MEAL_TRANSLATIONS = {
+    "Kylling teriyaki med ris": (
+        "Chicken teriyaki with rice",
+        "Tender chicken with jasmine rice, broccoli and carrots in teriyaki sauce.",
+    ),
+    "Laks med ovnsbakte poteter": (
+        "Salmon with roasted potatoes",
+        "Oven-baked salmon with baby potatoes, green beans and a fresh yoghurt dressing.",
+    ),
+    "Tacobowl med karbonadedeig": (
+        "Lean beef taco bowl",
+        "Lean minced beef, rice, black beans, sweetcorn and salsa topped with cheddar.",
+    ),
+    "Kremet kyllingpasta": (
+        "Creamy chicken pasta",
+        "Wholegrain pasta with chicken, spinach and a light, creamy parmesan sauce.",
+    ),
+    "Tofu satay med risnudler": (
+        "Tofu satay with rice noodles",
+        "Marinated tofu with rice noodles, crunchy vegetables and peanut sauce.",
+    ),
+    "Falafelbowl med bulgur": (
+        "Falafel bowl with bulgur",
+        "Falafel and bulgur with hummus, tomato, cucumber and tahini dressing.",
+    ),
+    "Rød thaicurry med kylling": (
+        "Thai red chicken curry",
+        "Chicken and vegetables in a red curry sauce with coconut milk and jasmine rice.",
+    ),
+    "Kalkunkjøttboller med couscous": (
+        "Turkey meatballs with couscous",
+        "Turkey meatballs, couscous and courgette with a rich tomato sauce.",
+    ),
+    "Biff stroganoff med potetmos": (
+        "Beef stroganoff with mashed potatoes",
+        "Tender beef with mushrooms and onions in a creamy sauce, served with mashed potatoes.",
+    ),
+    "Middelhavspasta med laks": (
+        "Mediterranean salmon pasta",
+        "Wholegrain pasta with salmon, tomato, spinach and olives.",
+    ),
+    "Linsegryte med søtpotet": (
+        "Lentil and sweet potato stew",
+        "A warming stew with red lentils, sweet potato, tomato, spinach and coconut milk.",
+    ),
+    "Stekt ris med egg": (
+        "Egg fried rice",
+        "Fried jasmine rice with eggs, peas, carrots, spring onions and soy sauce.",
+    ),
+}
+
+INGREDIENT_TRANSLATIONS = {
+    "Kylling": "Chicken",
+    "Jasminris": "Jasmine rice",
+    "Brokkoli": "Broccoli",
+    "Gulrot": "Carrot",
+    "Teriyakisaus": "Teriyaki sauce",
+    "Laks": "Salmon",
+    "Småpoteter": "Baby potatoes",
+    "Grønne bønner": "Green beans",
+    "Yoghurt": "Yoghurt",
+    "Sitron": "Lemon",
+    "Dill": "Dill",
+    "Karbonadedeig": "Lean minced beef",
+    "Svarte bønner": "Black beans",
+    "Mais": "Sweetcorn",
+    "Salsa": "Salsa",
+    "Cheddar": "Cheddar",
+    "Fullkornspasta": "Wholegrain pasta",
+    "Spinat": "Spinach",
+    "Matfløte": "Cooking cream",
+    "Parmesan": "Parmesan",
+    "Tofu": "Tofu",
+    "Risnudler": "Rice noodles",
+    "Rødkål": "Red cabbage",
+    "Peanøttsaus": "Peanut sauce",
+    "Falafel": "Falafel",
+    "Bulgur": "Bulgur",
+    "Hummus": "Hummus",
+    "Tomat": "Tomato",
+    "Agurk": "Cucumber",
+    "Tahini": "Tahini",
+    "Kokosmelk": "Coconut milk",
+    "Rød karripasta": "Red curry paste",
+    "Paprika": "Bell pepper",
+    "Kalkun": "Turkey",
+    "Couscous": "Couscous",
+    "Squash": "Courgette",
+    "Tomatsaus": "Tomato sauce",
+    "Egg": "Egg",
+    "Storfekjøtt": "Beef",
+    "Poteter": "Potatoes",
+    "Sjampinjong": "Mushroom",
+    "Rømme": "Sour cream",
+    "Løk": "Onion",
+    "Sennep": "Mustard",
+    "Oliven": "Olives",
+    "Røde linser": "Red lentils",
+    "Søtpotet": "Sweet potato",
+    "Erter": "Peas",
+    "Vårløk": "Spring onion",
+    "Soyasaus": "Soy sauce",
+}
+
+ALLERGEN_TRANSLATIONS = {
+    "gluten": "Gluten",
+    "milk": "Milk",
+    "egg": "Egg",
+    "fish": "Fish",
+    "soy": "Soy",
+    "sesame": "Sesame",
+    "nuts": "Nuts",
+    "peanuts": "Peanuts",
+    "mustard": "Mustard",
+}

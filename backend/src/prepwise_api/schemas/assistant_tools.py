@@ -1,3 +1,5 @@
+from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
@@ -44,6 +46,8 @@ class RemoveFromCartToolArguments(AssistantToolArguments):
 
 class PrepareOrderToolArguments(AssistantToolArguments):
     pickup_location_id: UUID
+    pickup_date: date
+    pickup_slot: Literal["16-18", "18-20"]
 
 
 class CreateOrderToolArguments(AssistantToolArguments):

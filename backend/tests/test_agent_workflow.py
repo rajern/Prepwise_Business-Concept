@@ -77,7 +77,7 @@ def _tool_response(name: str, arguments: str, index: int) -> SimpleNamespace:
                 call_id=f"call_{index}",
             )
         ],
-        usage=None,
+        usage=SimpleNamespace(input_tokens=100, output_tokens=20),
         _request_id=f"req_{index}",
     )
 

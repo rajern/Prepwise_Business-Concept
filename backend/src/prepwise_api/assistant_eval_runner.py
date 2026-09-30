@@ -50,6 +50,7 @@ from prepwise_api.seed import seed_database
 from prepwise_api.seed_data import MEALS, MealSeed
 from prepwise_api.services.cart import add_user_cart_item
 from prepwise_api.services.orders import prepare_user_order_confirmation
+from prepwise_api.services.pickup_schedule import list_pickup_options
 
 _ROOT = Path(__file__).resolve().parents[3]
 _KNOWLEDGE_ROOT = _ROOT / "docs" / "knowledge-base"
@@ -730,12 +731,15 @@ def _prepare_case(session: Session, case: AssistantEvalCase) -> tuple[User, str]
         )
     session.commit()
     message = case.message
+    message = message.replace("{{pickup_date}}", list_pickup_options().days[0].date.isoformat())
     if case.setup.issue_order_confirmation:
         prepared = prepare_user_order_confirmation(
             session,
             user.id,
             location.id,
             f"eval-prepare-{case.id}",
+            pickup_date=list_pickup_options().days[0].date,
+            pickup_slot="16-18",
         )
         message = message.replace("{{confirmation_phrase}}", str(prepared["confirmation_phrase"]))
     return user, message

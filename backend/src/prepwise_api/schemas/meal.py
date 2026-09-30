@@ -27,6 +27,12 @@ class MealDetailResponse(MealResponse):
     available: bool
 
 
+class MealAdminResponse(MealDetailResponse):
+    name_en: str | None
+    description_en: str | None
+    ingredients_en: list[str | None]
+
+
 class MealAdminWrite(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -41,6 +47,31 @@ class MealAdminWrite(BaseModel):
     ingredients: list[str] = Field(min_length=1, max_length=100)
     allergen_codes: list[str] = Field(default_factory=list, max_length=50)
     available: bool = True
+    name_en: str | None = Field(default=None, min_length=1, max_length=200)
+    description_en: str | None = Field(default=None, min_length=1, max_length=5000)
+    ingredients_en: list[str | None] | None = Field(default=None, max_length=100)
+
+    @field_validator("name_en", "description_en")
+    @classmethod
+    def strip_translation(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("translation must not be blank")
+        return stripped
+
+    @field_validator("ingredients_en")
+    @classmethod
+    def check_ingredient_translations(
+        cls, values: list[str | None] | None
+    ) -> list[str | None] | None:
+        if values is None:
+            return None
+        result = [value.strip() if value is not None else None for value in values]
+        if any(value is not None and (not value or len(value) > 200) for value in result):
+            raise ValueError("ingredient translations must contain 1 to 200 characters")
+        return result
 
     @field_validator("name", "description")
     @classmethod

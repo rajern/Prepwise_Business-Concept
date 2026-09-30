@@ -20,12 +20,20 @@ postgresql+psycopg://USER:PASSWORD@HOST/DATABASE?sslmode=require
 The actual values exist only in `kv-prepwise-prod-f5knfy`:
 
 * `database-url` — pooled runtime connection for the Container App
-* `database-migration-url` — privileged migration connection for the future T3.4 workflow
+* `database-migration-url` — privileged migration connection for deployment migrations
+* `openai-api-key` — server-side AI provider credential (not a database connection)
 
 The Bicep deployment treats `database-url` as an existing secret without reading or recreating its
 value. The Container App exposes it to the process as `DATABASE_URL` through a Key Vault secret
-reference authenticated by `id-prepwise-prod-api`. The identity receives read access only to that
-single secret. `database-migration-url` is not attached to the running application.
+reference authenticated by `id-prepwise-prod-api`. Separate secret-scoped role assignments give
+the identity access to `database-url` and `openai-api-key`. `database-migration-url` is not attached
+to the running application.
+
+After new tables are migrated, the runtime PostgreSQL role must have the required DML privileges.
+The AI limiter needs `SELECT`, `INSERT`, `UPDATE` and `DELETE` on `assistant_usage_events`, and
+`SELECT`, `INSERT` and `UPDATE` on `assistant_quota_lock` (`FOR UPDATE` requires update privileges).
+Confirm owner default privileges or grant equivalent runtime rights before release;
+the repository does not verify the live Neon grants. Do not give runtime schema-owner permissions.
 
 The backend additionally forces `sslmode=require` for production runtime connections. Local
 development and CI keep using their existing local/containerised PostgreSQL configuration without

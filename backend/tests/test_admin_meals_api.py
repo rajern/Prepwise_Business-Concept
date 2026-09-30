@@ -177,3 +177,39 @@ def test_admin_meal_inputs_are_validated_and_conflicts_are_safe(
     assert unknown_response.status_code == 422
     assert unknown_response.json()["detail"] == "Unknown allergen codes: unknown"
     assert unknown_response.json()["code"] == "validation_error"
+
+
+def test_admin_can_author_translations_and_source_edit_drops_stale_text(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, engine = client_and_engine
+    _promote_admin(client, engine)
+    payload = {
+        **_meal_payload(),
+        "name": "Egendefinert bolle",
+        "description": "Kylling med grønnsaker.",
+        "name_en": "Custom bowl",
+        "description_en": "Chicken with vegetables.",
+        "ingredients_en": ["Chicken", "Custom ingredient"],
+    }
+    created = client.post("/api/admin/meals", headers=_headers(), json=payload)
+    assert created.status_code == 201
+    meal_id = created.json()["id"]
+    english = client.get(f"/api/meals/{meal_id}?lang=en").json()
+    assert english["name"] == "Custom bowl"
+    assert english["description"] == "Chicken with vegetables."
+    assert english["ingredients"] == ["Chicken", "Custom ingredient"]
+    assert created.json()["name"] == "Egendefinert bolle"
+    updated = client.patch(
+        f"/api/admin/meals/{meal_id}",
+        headers=_headers(),
+        json={
+            **_meal_payload(),
+            "name": "Ny bolle",
+            "description": "Ny oppskrift.",
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name_en"] is None
+    assert updated.json()["description_en"] is None
+    assert client.get(f"/api/meals/{meal_id}?lang=en").json()["name"] == "Ny bolle"

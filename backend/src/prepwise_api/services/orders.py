@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -10,7 +10,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from prepwise_api.models import CartItem, Meal, Order, OrderConfirmation, OrderItem, PickupLocation
 from prepwise_api.schemas import OrderDetailResponse, OrderItemResponse, OrderSummaryResponse
+from prepwise_api.schemas.pickup import PickupSlot
 from prepwise_api.services import ApplicationConflictError, ApplicationNotFoundError
+from prepwise_api.services.localization import Language, localized
+from prepwise_api.services.pickup_schedule import validate_pickup_selection
 
 OSLO_TIME_ZONE = ZoneInfo("Europe/Oslo")
 ORDER_CONFIRMATION_LIFETIME = timedelta(minutes=15)
@@ -20,9 +23,14 @@ def create_user_order(
     session: Session,
     user_id: UUID,
     pickup_location_id: UUID,
+    *,
+    pickup_date: date,
+    pickup_slot: PickupSlot,
+    lang: Language = "no",
 ) -> OrderDetailResponse:
     """Create an order through the same validated transaction used by every caller."""
     try:
+        pickup_start_at, pickup_end_at = validate_pickup_selection(pickup_date, pickup_slot)
         location, cart_items, meals = _load_checkout_state(
             session,
             user_id,
@@ -35,12 +43,14 @@ def create_user_order(
             location,
             cart_items,
             meals,
+            pickup_start_at,
+            pickup_end_at,
         )
         session.commit()
     except Exception:
         session.rollback()
         raise
-    return _load_created_order(session, order_id, user_id)
+    return _load_created_order(session, order_id, user_id, lang=lang)
 
 
 def prepare_user_order_confirmation(
@@ -49,10 +59,15 @@ def prepare_user_order_confirmation(
     pickup_location_id: UUID,
     request_id: str,
     *,
+    pickup_date: date,
+    pickup_slot: PickupSlot,
     now: datetime | None = None,
 ) -> dict[str, object]:
     """Create a short-lived token for a later, explicit user confirmation turn."""
     current_time = now or datetime.now(UTC)
+    pickup_start_at, pickup_end_at = validate_pickup_selection(
+        pickup_date, pickup_slot, now=current_time
+    )
     location, cart_items, meals = _load_checkout_state(
         session,
         user_id,
@@ -65,6 +80,8 @@ def prepare_user_order_confirmation(
         cart_fingerprint=_cart_fingerprint(cart_items, meals),
         issued_request_id=request_id,
         expires_at=current_time + ORDER_CONFIRMATION_LIFETIME,
+        pickup_start_at=pickup_start_at,
+        pickup_end_at=pickup_end_at,
     )
     session.add(confirmation)
     session.commit()
@@ -84,6 +101,8 @@ def prepare_user_order_confirmation(
         "total_quantity": sum(item.quantity for item in cart_items),
         "total_nok": str(total_nok),
         "order_created": False,
+        "pickup_start_at": pickup_start_at.isoformat(),
+        "pickup_end_at": pickup_end_at.isoformat(),
     }
 
 
@@ -95,6 +114,7 @@ def confirm_user_order(
     user_message: str,
     *,
     now: datetime | None = None,
+    lang: Language = "no",
 ) -> OrderDetailResponse:
     """Consume a prior confirmation and create exactly the reviewed order."""
     expected_phrases = {
@@ -127,6 +147,19 @@ def confirm_user_order(
             expires_at = expires_at.replace(tzinfo=UTC)
         if expires_at <= current_time:
             raise ApplicationConflictError("Order confirmation has expired")
+        if confirmation.pickup_start_at is None or confirmation.pickup_end_at is None:
+            raise ApplicationConflictError("Prepare the order again with a pickup date and time")
+        start = confirmation.pickup_start_at
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=UTC)
+        local_start = start.astimezone(OSLO_TIME_ZONE)
+        slot: PickupSlot = "16-18" if local_start.hour == 16 else "18-20"
+        pickup_start_at, pickup_end_at = validate_pickup_selection(
+            local_start.date(), slot, now=current_time
+        )
+        stored_end = _aware_utc(confirmation.pickup_end_at)
+        if start != pickup_start_at or stored_end != pickup_end_at:
+            raise ApplicationConflictError("Order confirmation pickup time is invalid")
 
         location, cart_items, meals = _load_checkout_state(
             session,
@@ -144,13 +177,15 @@ def confirm_user_order(
             location,
             cart_items,
             meals,
+            pickup_start_at,
+            pickup_end_at,
         )
         confirmation.consumed_at = current_time
         session.commit()
     except Exception:
         session.rollback()
         raise
-    return _load_created_order(session, order_id, user_id)
+    return _load_created_order(session, order_id, user_id, lang=lang)
 
 
 def list_user_orders(session: Session, user_id: UUID) -> list[OrderSummaryResponse]:
@@ -162,11 +197,13 @@ def list_user_orders(session: Session, user_id: UUID) -> list[OrderSummaryRespon
     return [order_summary_response(order) for order in orders]
 
 
-def get_user_order(session: Session, user_id: UUID, order_id: UUID) -> OrderDetailResponse:
+def get_user_order(
+    session: Session, user_id: UUID, order_id: UUID, *, lang: Language = "no"
+) -> OrderDetailResponse:
     order = load_owned_order(session, order_id, user_id)
     if order is None:
         raise ApplicationNotFoundError("Order not found")
-    return order_detail_response(order)
+    return order_detail_response(order, lang=lang)
 
 
 def load_owned_order(session: Session, order_id: UUID, user_id: UUID) -> Order | None:
@@ -218,8 +255,9 @@ def _create_order_from_checkout_state(
     location: PickupLocation,
     cart_items: list[CartItem],
     meals: dict[UUID, Meal],
+    pickup_start_at: datetime,
+    pickup_end_at: datetime,
 ) -> UUID:
-    pickup_start_at, pickup_end_at = _next_pickup_window()
     total_nok = sum(
         (meals[item.meal_id].price_nok * item.quantity for item in cart_items),
         start=Decimal("0.00"),
@@ -245,6 +283,7 @@ def _create_order_from_checkout_state(
                 order_id=order.id,
                 meal_id=meal.id,
                 meal_name=meal.name,
+                meal_name_en=meal.name_en,
                 quantity=cart_item.quantity,
                 unit_price_nok=meal.price_nok,
             )
@@ -266,20 +305,13 @@ def _cart_fingerprint(cart_items: list[CartItem], meals: dict[UUID, Meal]) -> st
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _load_created_order(session: Session, order_id: UUID, user_id: UUID) -> OrderDetailResponse:
+def _load_created_order(
+    session: Session, order_id: UUID, user_id: UUID, *, lang: Language = "no"
+) -> OrderDetailResponse:
     created_order = load_owned_order(session, order_id, user_id)
     if created_order is None:  # pragma: no cover - defensive after a successful commit
         raise RuntimeError("Created order could not be loaded")
-    return order_detail_response(created_order)
-
-
-def _next_pickup_window(now: datetime | None = None) -> tuple[datetime, datetime]:
-    local_now = now.astimezone(OSLO_TIME_ZONE) if now else datetime.now(OSLO_TIME_ZONE)
-    pickup_date = local_now.date() + timedelta(days=1)
-    return (
-        datetime.combine(pickup_date, time(hour=16), OSLO_TIME_ZONE),
-        datetime.combine(pickup_date, time(hour=18), OSLO_TIME_ZONE),
-    )
+    return order_detail_response(created_order, lang=lang)
 
 
 def order_summary_response(order: Order) -> OrderSummaryResponse:
@@ -287,21 +319,25 @@ def order_summary_response(order: Order) -> OrderSummaryResponse:
         id=order.id,
         status=order.status,
         total_nok=order.total_nok,
-        created_at=order.created_at,
-        pickup_start_at=order.pickup_start_at,
-        pickup_end_at=order.pickup_end_at,
+        created_at=_aware_utc(order.created_at),
+        pickup_start_at=_aware_utc(order.pickup_start_at),
+        pickup_end_at=_aware_utc(order.pickup_end_at),
         pickup_location_name=order.pickup_location_name,
         pickup_location_address=order.pickup_location_address,
     )
 
 
-def order_detail_response(order: Order) -> OrderDetailResponse:
+def _aware_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def order_detail_response(order: Order, *, lang: Language = "no") -> OrderDetailResponse:
     return OrderDetailResponse(
         **order_summary_response(order).model_dump(),
         items=[
             OrderItemResponse(
                 meal_id=item.meal_id,
-                meal_name=item.meal_name,
+                meal_name=localized(item.meal_name, item.meal_name_en, lang),
                 quantity=item.quantity,
                 unit_price_nok=item.unit_price_nok,
                 line_total_nok=item.unit_price_nok * item.quantity,

@@ -69,6 +69,8 @@ class Meal(UuidPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(200), unique=True)
     description: Mapped[str] = mapped_column(Text)
+    name_en: Mapped[str | None] = mapped_column(String(200))
+    description_en: Mapped[str | None] = mapped_column(Text)
     image_url: Mapped[str | None] = mapped_column(String(2048))
     price_nok: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     calories: Mapped[int] = mapped_column(Integer)
@@ -94,6 +96,7 @@ class Ingredient(UuidPrimaryKeyMixin, Base):
     __tablename__ = "ingredients"
 
     name: Mapped[str] = mapped_column(String(200), unique=True)
+    name_en: Mapped[str | None] = mapped_column(String(200))
 
     meals: Mapped[list[Meal]] = relationship(
         secondary=meal_ingredients,
@@ -106,6 +109,7 @@ class Allergen(UuidPrimaryKeyMixin, Base):
 
     code: Mapped[str] = mapped_column(String(50), unique=True)
     name: Mapped[str] = mapped_column(String(100), unique=True)
+    name_en: Mapped[str | None] = mapped_column(String(100))
 
     meals: Mapped[list[Meal]] = relationship(
         secondary=meal_allergens,

@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { App } from './App'
 
@@ -42,6 +42,12 @@ const pickupLocation = {
   city: 'Oslo',
 }
 
+beforeEach(() => {
+  localStorage.setItem('prepwise-language', 'en')
+  sessionStorage.clear()
+  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.open = true } })
+  Object.defineProperty(HTMLDialogElement.prototype, 'close', { configurable: true, value: function (this: HTMLDialogElement) { this.open = false } })
+})
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -70,9 +76,9 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { name: meal.name }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/129.*kr/)).toBeInTheDocument()
+    expect(screen.getByText(/NOK.*129/)).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/meals',
+      '/api/meals?lang=en',
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
   })
@@ -145,7 +151,7 @@ describe('App', () => {
       screen.getAllByRole('img', { name: `No image available for ${meal.name}` }),
     ).toHaveLength(2)
     expect(fetchMock).toHaveBeenLastCalledWith(
-      `/api/meals/${meal.id}`,
+      `/api/meals/${meal.id}?lang=en`,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
   })
@@ -186,9 +192,12 @@ describe('App', () => {
       total_nok: quantity === 0 ? '0.00' : String(129 * quantity),
     })
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = input.toString()
+      const path = input.toString().split('?')[0]
       if (path === '/api/meals') {
         return { ok: true, json: async () => [meal] }
+      }
+      if (path === '/api/pickup-locations/options') {
+        return { ok: true, json: async () => ({ timezone: 'Europe/Oslo', days: [{ date: '2026-10-01', slots: [{ id: '16-18', start_at: '2026-10-01T14:00:00Z', end_at: '2026-10-01T16:00:00Z' }] }] }) }
       }
       if (path === '/api/pickup-locations') {
         return { ok: true, json: async () => [pickupLocation] }
@@ -222,6 +231,7 @@ describe('App', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: 'Open cart (0)' }))
     expect(await screen.findByText(/Your cart is empty/)).toBeInTheDocument()
     await screen.findByRole('heading', { name: meal.name })
     fireEvent.click(screen.getByRole('button', { name: 'Add to cart' }))
@@ -243,7 +253,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
     expect(await screen.findByText(/Your cart is empty/)).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/cart/items',
+      '/api/cart/items?lang=en',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
@@ -287,12 +297,15 @@ describe('App', () => {
       total_nok: meal.price_nok,
     }
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = input.toString()
+      const path = input.toString().split('?')[0]
       if (path === '/api/meals') {
         return { ok: true, json: async () => [meal] }
       }
       if (path === '/api/cart') {
         return { ok: true, json: async () => cart }
+      }
+      if (path === '/api/pickup-locations/options') {
+        return { ok: true, json: async () => ({ timezone: 'Europe/Oslo', days: [{ date: '2026-10-01', slots: [{ id: '16-18', start_at: '2026-10-01T14:00:00Z', end_at: '2026-10-01T16:00:00Z' }] }] }) }
       }
       if (path === '/api/pickup-locations') {
         return { ok: true, json: async () => [pickupLocation] }
@@ -322,24 +335,27 @@ describe('App', () => {
       />,
     )
 
+    fireEvent.click(screen.getByRole('button', { name: /Open cart/ }))
     await screen.findByText('1 meal')
     fireEvent.change(
       screen.getByRole('combobox', { name: 'Pickup location' }),
       { target: { value: pickupLocation.id } },
     )
+    fireEvent.change(screen.getByRole('combobox', { name: 'Pickup date' }), { target: { value: '2026-10-01' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Pickup time' }), { target: { value: '16-18' } })
     fireEvent.click(
       screen.getByRole('button', { name: 'Review and place order' }),
     )
 
     expect(confirm).toHaveBeenCalledOnce()
-    expect(await screen.findByText(/Your cart is empty/)).toBeInTheDocument()
+    await screen.findByRole('button', { name: 'Open cart (0)' })
     expect(await screen.findByText(`1 × ${meal.name}`)).toBeInTheDocument()
     expect(screen.getAllByText('Received')).toHaveLength(2)
 
     fireEvent.click(screen.getByRole('button', { name: 'View order' }))
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
-        `/api/orders/${order.id}`,
+        `/api/orders/${order.id}?lang=en`,
         expect.objectContaining({
           headers: expect.objectContaining({
             Authorization: 'Bearer test-access-token',

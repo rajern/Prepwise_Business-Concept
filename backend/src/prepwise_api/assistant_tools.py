@@ -4,13 +4,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
-from typing import cast
+from typing import Literal, cast
 
 from openai import pydantic_function_tool
 from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from prepwise_api.models import User
+from prepwise_api.schemas.assistant import AssistantHistoryMessage
 from prepwise_api.schemas.assistant_tools import (
     AddToCartToolArguments,
     AssistantToolError,
@@ -40,6 +41,7 @@ from prepwise_api.services.orders import (
     prepare_user_order_confirmation,
 )
 from prepwise_api.services.pickup_locations import list_active_pickup_locations
+from prepwise_api.services.pickup_schedule import list_pickup_options
 
 tool_logger = logging.getLogger("prepwise.ai.tools")
 
@@ -52,6 +54,8 @@ class AssistantToolContext:
     user: User
     request_id: str = ""
     message: str = ""
+    lang: Literal["no", "en"] = "no"
+    history: tuple[AssistantHistoryMessage, ...] = ()
 
 
 class AssistantToolOperation(StrEnum):
@@ -116,6 +120,12 @@ _TOOL_SPECS = (
     AssistantToolSpec(
         "get_pickup_locations",
         "READ: List pickup locations that are currently active and selectable.",
+        EmptyToolArguments,
+        AssistantToolOperation.READ,
+    ),
+    AssistantToolSpec(
+        "get_pickup_options",
+        "READ: List bookable dates and exact pickup slots in Europe/Oslo.",
         EmptyToolArguments,
         AssistantToolOperation.READ,
     ),
@@ -209,14 +219,21 @@ class AssistantToolRegistry:
                     max_price_nok=_optional_decimal(search_arguments.max_price_nok),
                     limit=search_arguments.limit,
                 ),
+                lang=context.lang,
             )
             return _model_list_json(meals)
         if name == "get_meal_details":
             detail_arguments = GetMealDetailsToolArguments.model_validate(payload)
-            return _model_json(get_meal_details(context.session, detail_arguments.meal_id))
+            return _model_json(
+                get_meal_details(
+                    context.session,
+                    detail_arguments.meal_id,
+                    lang=context.lang,
+                )
+            )
         if name == "get_cart":
             EmptyToolArguments.model_validate(payload)
-            return _model_json(get_user_cart(context.session, context.user.id))
+            return _model_json(get_user_cart(context.session, context.user.id, lang=context.lang))
         if name == "add_to_cart":
             add_arguments = AddToCartToolArguments.model_validate(payload)
             return _model_json(
@@ -225,6 +242,7 @@ class AssistantToolRegistry:
                     context.user.id,
                     add_arguments.meal_id,
                     add_arguments.quantity,
+                    lang=context.lang,
                 )
             )
         if name == "remove_from_cart":
@@ -234,6 +252,7 @@ class AssistantToolRegistry:
                     context.session,
                     context.user.id,
                     remove_arguments.cart_item_id,
+                    lang=context.lang,
                 )
             )
         if name == "get_user_orders":
@@ -242,6 +261,9 @@ class AssistantToolRegistry:
         if name == "get_pickup_locations":
             EmptyToolArguments.model_validate(payload)
             return _model_list_json(list_active_pickup_locations(context.session))
+        if name == "get_pickup_options":
+            EmptyToolArguments.model_validate(payload)
+            return _model_json(list_pickup_options())
         if name == "prepare_order":
             prepare_arguments = PrepareOrderToolArguments.model_validate(payload)
             return cast(
@@ -251,6 +273,8 @@ class AssistantToolRegistry:
                     context.user.id,
                     prepare_arguments.pickup_location_id,
                     context.request_id,
+                    pickup_date=prepare_arguments.pickup_date,
+                    pickup_slot=prepare_arguments.pickup_slot,
                 ),
             )
         if name == "create_order":
@@ -262,6 +286,7 @@ class AssistantToolRegistry:
                     create_arguments.confirmation_token,
                     context.request_id,
                     context.message,
+                    lang=context.lang,
                 )
             )
         raise InvalidToolArgumentsError(f"Unknown tool: {name}")

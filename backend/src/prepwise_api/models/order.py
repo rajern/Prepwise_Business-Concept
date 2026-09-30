@@ -87,6 +87,7 @@ class OrderItem(UuidPrimaryKeyMixin, Base):
         ForeignKey("meals.id", ondelete="RESTRICT"),
     )
     meal_name: Mapped[str] = mapped_column(String(200))
+    meal_name_en: Mapped[str | None] = mapped_column(String(200))
     quantity: Mapped[int] = mapped_column(SmallInteger)
     unit_price_nok: Mapped[Decimal] = mapped_column(Numeric(10, 2))
 

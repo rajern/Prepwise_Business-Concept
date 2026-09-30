@@ -2,9 +2,17 @@ import { apiUrl } from './config'
 import { apiRequestError } from './errors'
 import type { Allergen, MealDetail } from './meals'
 
+export interface AdminMeal extends MealDetail {
+  name_en: string | null
+  description_en: string | null
+  ingredients_en: (string | null)[]
+}
+
 export interface AdminMealWrite {
   name: string
   description: string
+  name_en: string | null
+  description_en: string | null
   image_url: string | null
   price_nok: number
   calories: number
@@ -12,6 +20,7 @@ export interface AdminMealWrite {
   carbohydrate_grams: number
   fat_grams: number
   ingredients: string[]
+  ingredients_en: (string | null)[]
   allergen_codes: string[]
   available: boolean
 }
@@ -19,7 +28,7 @@ export interface AdminMealWrite {
 export function fetchAdminMeals(
   accessToken: string,
   signal?: AbortSignal,
-): Promise<MealDetail[]> {
+): Promise<AdminMeal[]> {
   return adminRequest('/api/admin/meals', accessToken, { signal })
 }
 
@@ -33,7 +42,7 @@ export function fetchAdminAllergens(
 export function createAdminMeal(
   accessToken: string,
   payload: AdminMealWrite,
-): Promise<MealDetail> {
+): Promise<AdminMeal> {
   return adminRequest('/api/admin/meals', accessToken, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -44,7 +53,7 @@ export function updateAdminMeal(
   accessToken: string,
   mealId: string,
   payload: AdminMealWrite,
-): Promise<MealDetail> {
+): Promise<AdminMeal> {
   return adminRequest(`/api/admin/meals/${mealId}`, accessToken, {
     method: 'PATCH',
     body: JSON.stringify(payload),

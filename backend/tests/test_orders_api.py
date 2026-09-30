@@ -65,6 +65,11 @@ def _headers(token: str = "valid-token") -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _pickup(client: TestClient) -> dict[str, str]:
+    day = client.get("/api/pickup-locations/options").json()["days"][0]
+    return {"pickup_date": day["date"], "pickup_slot": "16-18"}
+
+
 def _first_meal_and_location(engine: Engine) -> tuple[Meal, PickupLocation]:
     with Session(engine) as session:
         meal = session.scalar(select(Meal).order_by(Meal.name))
@@ -91,7 +96,7 @@ def test_checkout_creates_historical_order_and_clears_cart_atomically(
     checkout_response = client.post(
         "/api/orders",
         headers=_headers(),
-        json={"pickup_location_id": str(location.id)},
+        json={"pickup_location_id": str(location.id), **_pickup(client)},
     )
 
     assert checkout_response.status_code == 201
@@ -137,7 +142,7 @@ def test_order_history_is_scoped_to_the_authenticated_user(
     created = client.post(
         "/api/orders",
         headers=_headers(),
-        json={"pickup_location_id": str(location.id)},
+        json={"pickup_location_id": str(location.id), **_pickup(client)},
     ).json()
 
     history_response = client.get("/api/orders", headers=_headers())
@@ -179,7 +184,7 @@ def test_failed_checkout_preserves_cart_and_creates_no_partial_order(
     response = client.post(
         "/api/orders",
         headers=_headers(),
-        json={"pickup_location_id": str(location.id)},
+        json={"pickup_location_id": str(location.id), **_pickup(client)},
     )
 
     assert response.status_code == 409
@@ -198,13 +203,79 @@ def test_checkout_rejects_empty_cart_and_frontend_supplied_price(
     empty_response = client.post(
         "/api/orders",
         headers=_headers(),
-        json={"pickup_location_id": str(location.id)},
+        json={"pickup_location_id": str(location.id), **_pickup(client)},
     )
     assert empty_response.status_code == 409
 
     untrusted_price_response = client.post(
         "/api/orders",
         headers=_headers(),
-        json={"pickup_location_id": str(location.id), "total_nok": "1.00"},
+        json={"pickup_location_id": str(location.id), "total_nok": "1.00", **_pickup(client)},
     )
     assert untrusted_price_response.status_code == 422
+
+
+def test_checkout_requires_explicit_selection_and_preserves_cart_on_invalid_date(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, engine = client_and_engine
+    meal, location = _first_meal_and_location(engine)
+    client.post(
+        "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
+    )
+    missing = client.post(
+        "/api/orders", headers=_headers(), json={"pickup_location_id": str(location.id)}
+    )
+    assert missing.status_code == 422
+    invalid = client.post(
+        "/api/orders",
+        headers=_headers(),
+        json={
+            "pickup_location_id": str(location.id),
+            "pickup_date": "2020-01-01",
+            "pickup_slot": "16-18",
+        },
+    )
+    assert invalid.status_code == 422
+    assert client.get("/api/cart", headers=_headers()).json()["total_quantity"] == 1
+
+
+def test_checkout_stores_selected_window_and_historical_translation(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    from datetime import datetime
+
+    client, engine = client_and_engine
+    meal, location = _first_meal_and_location(engine)
+    cart = client.post(
+        "/api/cart/items?lang=en", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
+    ).json()
+    assert cart["items"][0]["meal"]["name"] == meal.name_en
+    day = client.get("/api/pickup-locations/options").json()["days"][-1]
+    slot = day["slots"][-1]
+    result = client.post(
+        "/api/orders?lang=en",
+        headers=_headers(),
+        json={
+            "pickup_location_id": str(location.id),
+            "pickup_date": day["date"],
+            "pickup_slot": slot["id"],
+        },
+    )
+    assert result.status_code == 201
+    order = result.json()
+    # SQLite returns naive UTC datetimes; compare the persisted UTC instant explicitly.
+    expected = datetime.fromisoformat(slot["start_at"]).timestamp()
+    from datetime import UTC
+
+    actual = datetime.fromisoformat(order["pickup_start_at"])
+    if actual.tzinfo is None:
+        actual = actual.replace(tzinfo=UTC)
+    assert actual.timestamp() == expected
+    with Session(engine) as session:
+        persisted = session.get(Meal, meal.id)
+        assert persisted is not None
+        persisted.name_en = "Changed translation"
+        session.commit()
+    historical = client.get(f"/api/orders/{order['id']}?lang=en", headers=_headers()).json()
+    assert historical["items"][0]["meal_name"] == meal.name_en

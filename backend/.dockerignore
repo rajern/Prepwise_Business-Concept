@@ -7,3 +7,12 @@ __pycache__
 .ruff_cache
 tests
 
+# Never send local credentials or private keys to a Docker builder.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+

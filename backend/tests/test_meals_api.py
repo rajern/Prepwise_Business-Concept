@@ -118,3 +118,22 @@ def test_catalog_search_matches_distinctive_terms_in_a_translated_meal_name(
         )
 
     assert [meal.name for meal in meals] == ["Tofu satay med risnudler"]
+
+
+def test_english_catalogue_localizes_names_ingredients_and_allergens(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, _ = client_and_engine
+    meals = client.get("/api/meals?lang=en").json()
+    teriyaki = next(meal for meal in meals if meal["name"] == "Chicken teriyaki with rice")
+    assert teriyaki["ingredients"] == [
+        "Chicken",
+        "Jasmine rice",
+        "Broccoli",
+        "Carrot",
+        "Teriyaki sauce",
+    ]
+    assert {item["name"] for item in teriyaki["allergens"]} == {"Gluten", "Soy"}
+    detail = client.get(f"/api/meals/{teriyaki['id']}?lang=en").json()
+    assert detail["description"].startswith("Tender chicken")
+    assert client.get("/api/meals?lang=invalid").status_code == 422

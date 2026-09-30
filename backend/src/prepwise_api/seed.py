@@ -4,6 +4,11 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
+from prepwise_api.catalog_translations import (
+    ALLERGEN_TRANSLATIONS,
+    INGREDIENT_TRANSLATIONS,
+    MEAL_TRANSLATIONS,
+)
 from prepwise_api.database import get_engine
 from prepwise_api.models import (
     Allergen,
@@ -34,9 +39,11 @@ def _sync_ingredients(session: Session) -> dict[str, Ingredient]:
 
     for name in INGREDIENT_NAMES:
         if name not in ingredients:
-            ingredient = Ingredient(name=name)
+            ingredient = Ingredient(name=name, name_en=INGREDIENT_TRANSLATIONS[name])
             session.add(ingredient)
             ingredients[name] = ingredient
+        elif ingredients[name].name_en is None:
+            ingredients[name].name_en = INGREDIENT_TRANSLATIONS[name]
 
     session.flush()
     return ingredients
@@ -52,11 +59,14 @@ def _sync_allergens(session: Session) -> dict[str, Allergen]:
     for seed in ALLERGENS:
         allergen = allergens.get(seed.code)
         if allergen is None:
-            allergen = Allergen(code=seed.code, name=seed.name)
+            allergen = Allergen(
+                code=seed.code, name=seed.name, name_en=ALLERGEN_TRANSLATIONS[seed.code]
+            )
             session.add(allergen)
             allergens[seed.code] = allergen
         else:
             allergen.name = seed.name
+            allergen.name_en = ALLERGEN_TRANSLATIONS[seed.code]
 
     session.flush()
     return allergens
@@ -101,6 +111,7 @@ def _sync_meals(
             meals[seed.name] = meal
 
         meal.description = seed.description
+        meal.name_en, meal.description_en = MEAL_TRANSLATIONS[seed.name]
         meal.image_url = seed.image_url
         meal.price_nok = seed.price_nok
         meal.calories = seed.calories

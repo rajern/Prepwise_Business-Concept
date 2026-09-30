@@ -1,5 +1,6 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
+import type { Language } from '../i18n'
 
 export interface Allergen {
   code: string
@@ -24,8 +25,8 @@ export interface MealDetail extends Meal {
   available: boolean
 }
 
-export async function fetchMeals(signal?: AbortSignal): Promise<Meal[]> {
-  const response = await fetch(apiUrl('/api/meals'), {
+export async function fetchMeals(signal?: AbortSignal, language: Language = 'no'): Promise<Meal[]> {
+  const response = await fetch(apiUrl(`/api/meals?lang=${language}`), {
     headers: { Accept: 'application/json' },
     signal,
   })
@@ -40,8 +41,9 @@ export async function fetchMeals(signal?: AbortSignal): Promise<Meal[]> {
 export async function fetchMeal(
   mealId: string,
   signal?: AbortSignal,
+  language: Language = 'no',
 ): Promise<MealDetail> {
-  const response = await fetch(apiUrl(`/api/meals/${mealId}`), {
+  const response = await fetch(apiUrl(`/api/meals/${mealId}?lang=${language}`), {
     headers: { Accept: 'application/json' },
     signal,
   })

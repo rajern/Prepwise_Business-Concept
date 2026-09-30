@@ -2,13 +2,14 @@ import { useEffect, useState, type FormEvent } from 'react'
 
 import {
   type AdminMealWrite,
+  type AdminMeal,
   createAdminMeal,
   fetchAdminAllergens,
   fetchAdminMeals,
   updateAdminMeal,
 } from '../api/adminMeals'
 import { ApiRequestError, apiErrorMessage } from '../api/errors'
-import type { Allergen, MealDetail } from '../api/meals'
+import type { Allergen } from '../api/meals'
 import { OrdersPanel } from './OrdersPanel'
 import { PickupLocationsPanel } from './PickupLocationsPanel'
 
@@ -21,6 +22,8 @@ type AdminSection = 'meals' | 'pickup-locations' | 'orders'
 interface MealFormState {
   name: string
   description: string
+  nameEn: string
+  descriptionEn: string
   imageUrl: string
   priceNok: string
   calories: string
@@ -28,6 +31,7 @@ interface MealFormState {
   carbohydrateGrams: string
   fatGrams: string
   ingredients: string
+  ingredientsEn: string[]
   allergenCodes: string[]
   available: boolean
 }
@@ -35,6 +39,8 @@ interface MealFormState {
 const emptyForm: MealFormState = {
   name: '',
   description: '',
+  nameEn: '',
+  descriptionEn: '',
   imageUrl: '',
   priceNok: '',
   calories: '',
@@ -42,6 +48,7 @@ const emptyForm: MealFormState = {
   carbohydrateGrams: '',
   fatGrams: '',
   ingredients: '',
+  ingredientsEn: [],
   allergenCodes: [],
   available: true,
 }
@@ -103,7 +110,7 @@ function AdminTab({
 }
 
 function MealAdministration({ accessToken }: AdminPageProps) {
-  const [meals, setMeals] = useState<MealDetail[] | null>(null)
+  const [meals, setMeals] = useState<AdminMeal[] | null>(null)
   const [allergens, setAllergens] = useState<Allergen[] | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [form, setForm] = useState<MealFormState>(emptyForm)
@@ -141,21 +148,9 @@ function MealAdministration({ accessToken }: AdminPageProps) {
     setSaveMessage(null)
   }
 
-  function startEdit(meal: MealDetail) {
+  function startEdit(meal: AdminMeal) {
     setEditingId(meal.id)
-    setForm({
-      name: meal.name,
-      description: meal.description,
-      imageUrl: meal.image_url ?? '',
-      priceNok: meal.price_nok,
-      calories: String(meal.calories),
-      proteinGrams: meal.protein_grams,
-      carbohydrateGrams: meal.carbohydrate_grams,
-      fatGrams: meal.fat_grams,
-      ingredients: meal.ingredients.join(', '),
-      allergenCodes: meal.allergens.map((allergen) => allergen.code),
-      available: meal.available,
-    })
+    setForm(mealToForm(meal))
     setSaveError(null)
     setSaveMessage(null)
   }
@@ -169,6 +164,21 @@ function MealAdministration({ accessToken }: AdminPageProps) {
     }))
   }
 
+  function changeIngredients(value: string) {
+    setForm((current) => {
+      const previous = new Map(parseIngredients(current.ingredients).map((name, index) => [
+        name.toLocaleLowerCase('nb'), current.ingredientsEn[index] ?? '',
+      ]))
+      return {
+        ...current,
+        ingredients: value,
+        ingredientsEn: parseIngredients(value).map((name) =>
+          previous.get(name.toLocaleLowerCase('nb')) ?? '',
+        ),
+      }
+    })
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setSaving(true)
@@ -177,16 +187,18 @@ function MealAdministration({ accessToken }: AdminPageProps) {
     const payload: AdminMealWrite = {
       name: form.name,
       description: form.description,
+      name_en: form.nameEn.trim() || null,
+      description_en: form.descriptionEn.trim() || null,
       image_url: form.imageUrl.trim() || null,
       price_nok: Number(form.priceNok),
       calories: Number(form.calories),
       protein_grams: Number(form.proteinGrams),
       carbohydrate_grams: Number(form.carbohydrateGrams),
       fat_grams: Number(form.fatGrams),
-      ingredients: form.ingredients
-        .split(',')
-        .map((ingredient) => ingredient.trim())
-        .filter(Boolean),
+      ingredients: parseIngredients(form.ingredients),
+      ingredients_en: parseIngredients(form.ingredients).map((_, index) =>
+        form.ingredientsEn[index]?.trim() || null,
+      ),
       allergen_codes: form.allergenCodes,
       available: form.available,
     }
@@ -281,28 +293,50 @@ function MealAdministration({ accessToken }: AdminPageProps) {
             </div>
 
             <label>
-              <span>Name</span>
+              <span>Name (Norwegian)</span>
               <input
                 required
                 maxLength={200}
                 value={form.name}
                 onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
+                  setForm({ ...form, name: event.target.value, nameEn: '' })
                 }
               />
             </label>
             <label>
-              <span>Description</span>
+              <span>Name (English)</span>
+              <input
+                maxLength={200}
+                value={form.nameEn}
+                onChange={(event) => setForm({ ...form, nameEn: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Description (Norwegian)</span>
               <textarea
                 required
                 maxLength={5000}
                 rows={4}
                 value={form.description}
                 onChange={(event) =>
-                  setForm({ ...form, description: event.target.value })
+                  setForm({ ...form, description: event.target.value, descriptionEn: '' })
                 }
               />
             </label>
+            <label>
+              <span>Description (English)</span>
+              <textarea
+                maxLength={5000}
+                rows={4}
+                value={form.descriptionEn}
+                aria-describedby="english-translation-help"
+                onChange={(event) => setForm({ ...form, descriptionEn: event.target.value })}
+              />
+            </label>
+            <small id="english-translation-help">
+              Empty English fields use the Norwegian text. Changing a Norwegian
+              source clears its translation so it can be reviewed.
+            </small>
             <label>
               <span>Image URL</span>
               <input
@@ -351,18 +385,31 @@ function MealAdministration({ accessToken }: AdminPageProps) {
             </div>
 
             <label>
-              <span>Ingredients</span>
+              <span>Ingredients (Norwegian)</span>
               <textarea
                 required
                 rows={3}
                 value={form.ingredients}
-                placeholder="Chicken, rice, broccoli"
-                onChange={(event) =>
-                  setForm({ ...form, ingredients: event.target.value })
-                }
+                aria-describedby="ingredient-help"
+                placeholder="Kylling, ris, brokkoli"
+                onChange={(event) => changeIngredients(event.target.value)}
               />
-              <small>Separate ingredients with commas.</small>
             </label>
+            <small id="ingredient-help">Separate ingredients with commas.</small>
+            {parseIngredients(form.ingredients).map((ingredient, index) => (
+              <label key={index}>
+                <span>English ingredient: {ingredient}</span>
+                <input
+                  maxLength={200}
+                  value={form.ingredientsEn[index] ?? ''}
+                  onChange={(event) => {
+                    const ingredientsEn = [...form.ingredientsEn]
+                    ingredientsEn[index] = event.target.value
+                    setForm({ ...form, ingredientsEn })
+                  }}
+                />
+              </label>
+            ))}
 
             <fieldset>
               <legend>Allergens</legend>
@@ -439,10 +486,12 @@ function NumberField({
   )
 }
 
-function mealToForm(meal: MealDetail): MealFormState {
+function mealToForm(meal: AdminMeal): MealFormState {
   return {
     name: meal.name,
     description: meal.description,
+    nameEn: meal.name_en ?? '',
+    descriptionEn: meal.description_en ?? '',
     imageUrl: meal.image_url ?? '',
     priceNok: meal.price_nok,
     calories: String(meal.calories),
@@ -450,7 +499,18 @@ function mealToForm(meal: MealDetail): MealFormState {
     carbohydrateGrams: meal.carbohydrate_grams,
     fatGrams: meal.fat_grams,
     ingredients: meal.ingredients.join(', '),
+    ingredientsEn: meal.ingredients.map((_, index) => meal.ingredients_en?.[index] ?? ''),
     allergenCodes: meal.allergens.map((allergen) => allergen.code),
     available: meal.available,
   }
+}
+
+function parseIngredients(value: string): string[] {
+  const seen = new Set<string>()
+  return value.split(',').map((name) => name.trim()).filter((name) => {
+    const key = name.toLocaleLowerCase('nb')
+    if (!name || seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }

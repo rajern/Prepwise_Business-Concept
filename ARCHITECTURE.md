@@ -19,13 +19,18 @@ The architecture should stay simple unless a concrete requirement justifies addi
 * Customer routes and protected admin routes in the same app
 * Hosted on Azure Static Web Apps
 
+Customer UI defaults to Norwegian with an explicit English switch; admin remains English.
+The cart is a navigation-controlled drawer backed by authoritative API state. The floating
+chat is visible to guests but sending requires authentication. Tab-scoped conversation
+history is untrusted context; assistant mutations refresh cart/order state even after failure.
+
 Next.js is intentionally not used. The application already has a separate Python backend and does not require SSR.
 
 ## Backend
 
 * Python
 * FastAPI
-* REST API under `/api/v1`
+* REST API under `/api`
 * Pydantic for validation
 * SQLAlchemy 2 for database access
 * Alembic for schema migrations
@@ -34,7 +39,9 @@ The backend should keep a simple separation between routes, application logic an
 
 ## Database
 
-PostgreSQL is the primary database locally, in CI and in production.
+PostgreSQL is the application database locally, in full-stack CI and in production.
+The fast pytest suite uses SQLite fixtures for unit/API checks; these do not establish
+PostgreSQL-specific behaviour.
 
 Production uses managed PostgreSQL hosted by Neon. Azure Container Apps connects to Neon over TLS. Local development and CI use a separate local or containerised PostgreSQL instance and must not depend on Neon.
 
@@ -48,12 +55,18 @@ Core entities include:
 * cart items
 * orders
 * order items
+* assistant usage events and the quota serialization lock
 
 Ingredients and allergens should be modelled relationally rather than stored only as free text.
 
 The shopping cart is persistent.
 
 Order creation must be transactional, and order items must preserve relevant historical values such as the price at purchase time.
+
+Catalogue translations are authored database fields, not model-generated responses. Orders
+preserve names in both languages. Backend-generated pickup options cover the next five dates
+starting tomorrow in `Europe/Oslo`, with `16:00–18:00` and `18:00–20:00` windows. Validated
+selections are stored as timestamps on orders and assistant confirmations.
 
 ## Authentication and authorization
 
@@ -142,6 +155,9 @@ The Container App uses a user-assigned managed identity and a Key Vault secret r
 receive `DATABASE_URL`. Its RBAC assignment is scoped to the runtime `database-url` secret. The
 separate `database-migration-url` credential is not available to the running application.
 
+`OPENAI_API_KEY` uses a separate Key Vault reference and secret-scoped role assignment.
+The SPA receives only public API/Entra configuration, never these server credentials.
+
 The Neon connection strings are stored as production secrets. Runtime and migration roles are
 separate, and all production connections must use TLS.
 
@@ -172,7 +188,13 @@ Backend:
 * pytest
 * unit tests for important logic
 * API/integration tests
-* PostgreSQL-backed tests
+* SQLite-backed unit/API fixtures for fast behavioural checks
+* offline PostgreSQL migration SQL checks (not live migration execution)
+* disposable PostgreSQL quota concurrency tests, enabled with `PREPWISE_TEST_DATABASE_URL`
+  in the backend CI job (optional for local pytest runs)
+
+The backend CI job applies migrations to its disposable pgvector/PostgreSQL service before
+running tests; its quota fixtures use generated schemas isolated from application tables.
 
 Frontend:
 
@@ -181,7 +203,11 @@ Frontend:
 
 End-to-end:
 
-* Playwright for a small number of critical user and admin flows
+* Playwright for a small number of critical user and admin flows against a migrated,
+  seeded PostgreSQL container
+
+The pytest suite does not replace PostgreSQL integration coverage. Vector retrieval,
+locking and concurrency need PostgreSQL-specific checks where relevant.
 
 Tests should focus on important behaviour rather than coverage percentage.
 
@@ -291,6 +317,12 @@ Read operations may run automatically when authorized.
 Actions with meaningful side effects require stricter controls.
 
 Final order creation must require explicit user confirmation.
+
+Atomic PostgreSQL admission enforces the approved 15/10-minute/user, 45/day/user and
+100/day/global quotas plus one active request per user. Bounded model output, workflow
+tokens, calls, writes and elapsed time limit admitted work. Scope refusal is prompt-controlled;
+authorization and consequential order confirmation are enforced by the application.
+See [agent security](./docs/AGENT_SECURITY.md) for precise boundaries and remaining gaps.
 
 ### AI evals
 

@@ -190,6 +190,38 @@ resource containerApp 'Microsoft.App/containerApps@2025-01-01' = {
               value: string(openAiTimeoutSeconds)
             }
             {
+              name: 'ASSISTANT_ENABLED'
+              value: 'true'
+            }
+            {
+              name: 'ASSISTANT_MESSAGES_PER_10_MINUTES'
+              value: '15'
+            }
+            {
+              name: 'ASSISTANT_MESSAGES_PER_USER_DAY'
+              value: '45'
+            }
+            {
+              name: 'ASSISTANT_MESSAGES_PER_DAY'
+              value: '100'
+            }
+            {
+              name: 'ASSISTANT_MAX_OUTPUT_TOKENS'
+              value: '800'
+            }
+            {
+              name: 'ASSISTANT_MAX_TOTAL_TOKENS'
+              value: '60000'
+            }
+            {
+              name: 'ASSISTANT_WORKFLOW_TIMEOUT_SECONDS'
+              value: '45'
+            }
+            {
+              name: 'OPENAI_MAX_RETRIES'
+              value: '1'
+            }
+            {
               name: 'ENTRA_TENANT_ID'
               value: entraTenantId
             }

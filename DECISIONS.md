@@ -6,6 +6,23 @@ This file records the main product and architecture decisions that should not be
 
 ## Product
 
+### Post-Milestone 2 customer experience (agreed 2026-09-30)
+
+- Norwegian is the default; a `NO / EN` control switches customer UI, meal content,
+  assistant responses and footer language. Admin stays English.
+- A top navigation cart button opens a side panel, displays quantity and provides a brief
+  add-to-cart confirmation. Adding items does not move the customer's scroll position.
+- Pickup can be booked for any of the next five calendar days, beginning tomorrow in
+  `Europe/Oslo`, including weekends. Daily windows are `16:00–18:00` and `18:00–20:00`.
+  The backend validates the selected option and stores it on the order.
+- A floating assistant button opens a conversation panel. It remains visible to guests,
+  with authenticated use required. History belongs to the current tab and is cleared on logout.
+- Assistant cart actions refresh shared cart state automatically.
+- The footer identifies this as a portfolio demonstration by Rajvir Singh Aujla and includes
+  the approved LinkedIn and email links plus the source URL verified from the Git remote.
+- Meal images use one consistent generated style, with one sample approved before producing
+  the full set. Image generation is a later round.
+
 ### Meal-prep ordering concept
 
 Prepwise is a portfolio-oriented business concept for a meal-prep service in Oslo.
@@ -58,9 +75,13 @@ The product has straightforward resources and workflows. GraphQL would add compl
 
 ### PostgreSQL
 
-Use PostgreSQL locally, in tests and in production. Production PostgreSQL is hosted by Neon, while local development and CI use separate local or containerised PostgreSQL instances.
+Use PostgreSQL for the application locally, in full-stack CI and in production. Production
+PostgreSQL is hosted by Neon; local development and CI use separate containerised instances.
 
-Do not substitute SQLite for integration testing.
+The existing fast pytest unit/API suite uses SQLite fixtures. This is an explicit limitation:
+these tests do not validate PostgreSQL locking, vector operations or migration execution.
+Full-stack Playwright flows run against PostgreSQL. PostgreSQL-specific behaviour requires
+PostgreSQL integration verification rather than relying on SQLite results.
 
 ### Persistent cart
 
@@ -149,9 +170,10 @@ GitHub Actions authenticates to Azure using OIDC rather than long-lived Azure cr
 
 ### Runtime managed identity
 
-The Container App uses a user-assigned managed identity. Its Key Vault RBAC assignment is scoped
-to the `database-url` secret, rather than the whole vault, and the application receives the value
-through a Container Apps secret reference. Secret values are not part of Bicep outputs or GitHub
+The Container App uses a user-assigned managed identity. Its Key Vault RBAC assignments are scoped
+to the `database-url` and `openai-api-key` secrets, rather than the whole vault. The application
+receives the values through Container Apps secret references and cannot read the separate migration
+credential through these assignments. Secret values are not part of Bicep outputs or GitHub
 configuration.
 
 ---
@@ -187,6 +209,20 @@ Use OpenTelemetry with Application Insights / Azure Monitor instead of introduci
 Milestone 2 uses one assistant with tools and multi-step workflows.
 
 A multi-agent architecture is not currently justified.
+
+### Application usage controls (agreed 2026-09-30)
+
+Keep the selected model and enforce limits in the backend, keyed by authenticated user:
+15 requests per rolling 10 minutes, 45 per user per calendar day and 100 across the application
+per calendar day. Daily counters use `Europe/Oslo`. Allow one active request per user.
+
+Also bound message length (1000 characters), model output (800 tokens per call), workflow token
+budget, model/tool/write calls (12/10/6), total elapsed time (45 seconds) and provider retries (one).
+Use database-backed counters rather than browser/session counters, expose safe usage metadata
+and retain a global disable switch. Limit assistant answers to Prepwise subjects and controlled
+tools; a scope prompt guides language but does not replace backend authorization.
+
+Detailed enforcement, limitations and test evidence belong in [agent security](./docs/AGENT_SECURITY.md).
 
 ### Tools for structured data
 

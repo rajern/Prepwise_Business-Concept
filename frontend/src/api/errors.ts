@@ -11,6 +11,7 @@ export class ApiRequestError extends Error {
     public readonly detail: string | null,
     public readonly requestId: string | null,
     public readonly validationIssues: ApiValidationIssue[],
+    public readonly retryAfter: number | null = null,
   ) {
     super(detail ?? `API request failed with status ${status}`)
     this.name = 'ApiRequestError'
@@ -57,7 +58,14 @@ export async function apiRequestError(response: Response): Promise<ApiRequestErr
     detail,
     requestId,
     validationIssues,
+    parseRetryAfter(response.headers?.get?.('Retry-After')),
   )
+}
+
+function parseRetryAfter(value: string | null | undefined): number | null {
+  if (!value) return null
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
 }
 
 export function apiErrorMessage(error: unknown, fallback: string): string {

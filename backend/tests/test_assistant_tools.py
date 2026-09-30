@@ -17,6 +17,7 @@ from prepwise_api.assistant_tools import (
 )
 from prepwise_api.models import Base, Meal, Order, OrderConfirmation, PickupLocation, User
 from prepwise_api.seed import seed_database
+from prepwise_api.services.pickup_schedule import list_pickup_options
 
 
 @pytest.fixture
@@ -73,6 +74,7 @@ def test_tool_definitions_are_explicit_and_do_not_accept_user_identity() -> None
         "remove_from_cart",
         "get_user_orders",
         "get_pickup_locations",
+        "get_pickup_options",
         "prepare_order",
         "create_order",
     }
@@ -276,7 +278,11 @@ def test_final_order_requires_prior_exact_user_confirmation(engine: Engine) -> N
         prepared = _result_payload(
             registry.execute_json(
                 "prepare_order",
-                {"pickup_location_id": str(location_id)},
+                {
+                    "pickup_location_id": str(location_id),
+                    "pickup_date": list_pickup_options().days[0].date.isoformat(),
+                    "pickup_slot": "16-18",
+                },
                 AssistantToolContext(
                     session=session,
                     user=user,
@@ -293,6 +299,9 @@ def test_final_order_requires_prior_exact_user_confirmation(engine: Engine) -> N
         assert isinstance(token, str)
         assert isinstance(phrase, str)
         assert prepared_data["order_created"] is False
+        chosen_slot = list_pickup_options().days[0].slots[0]
+        assert datetime.fromisoformat(str(prepared_data["pickup_start_at"])) == chosen_slot.start_at
+        assert datetime.fromisoformat(str(prepared_data["pickup_end_at"])) == chosen_slot.end_at
         assert session.scalar(select(func.count()).select_from(Order)) == 0
 
         same_turn = _result_payload(
@@ -344,6 +353,11 @@ def test_final_order_requires_prior_exact_user_confirmation(engine: Engine) -> N
         assert confirmed["ok"] is True
         assert isinstance(confirmed["data"], dict)
         assert confirmed["data"]["total_nok"] == prepared_data["total_nok"]
+        assert (
+            datetime.fromisoformat(str(confirmed["data"]["pickup_start_at"]))
+            == chosen_slot.start_at
+        )
+        assert datetime.fromisoformat(str(confirmed["data"]["pickup_end_at"])) == chosen_slot.end_at
         assert session.scalar(select(func.count()).select_from(Order)) == 1
         confirmation = session.get(OrderConfirmation, UUID(token))
         assert confirmation is not None
@@ -380,7 +394,11 @@ def test_order_confirmation_is_user_scoped_and_invalidated_by_cart_changes(
         prepared = _result_payload(
             registry.execute_json(
                 "prepare_order",
-                {"pickup_location_id": str(location_id)},
+                {
+                    "pickup_location_id": str(location_id),
+                    "pickup_date": list_pickup_options().days[0].date.isoformat(),
+                    "pickup_slot": "16-18",
+                },
                 AssistantToolContext(
                     session=session,
                     user=user_a,
@@ -445,7 +463,11 @@ def test_order_tools_cannot_bypass_application_or_argument_validation(engine: En
         empty_cart = _result_payload(
             registry.execute_json(
                 "prepare_order",
-                {"pickup_location_id": str(location_id)},
+                {
+                    "pickup_location_id": str(location_id),
+                    "pickup_date": list_pickup_options().days[0].date.isoformat(),
+                    "pickup_slot": "16-18",
+                },
                 AssistantToolContext(
                     session=session,
                     user=user,

@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { fetchCurrentUser, type CurrentUser } from '../api/me'
 import { acquireApiAccessToken, createLoginRequest } from './token'
 import { reportAuthError } from './diagnostics'
+import { useLanguage } from '../i18n'
 
 interface AuthControlsProps {
   apiScope: string
@@ -66,6 +67,7 @@ function SignedOutControls({
   onAccessTokenChange,
   onCurrentUserChange,
 }: SignedOutControlsProps) {
+  const { t } = useLanguage()
   const [interactionError, setInteractionError] = useState(false)
 
   function signIn() {
@@ -82,15 +84,16 @@ function SignedOutControls({
     <div className="auth-controls">
       <button
         className="auth-button"
+        id="sign-in-button"
         type="button"
         disabled={interactionInProgress}
         onClick={signIn}
       >
-        Sign in or create account
+        {t('Sign in or create account')}
       </button>
       {interactionError && (
         <p className="auth-status auth-status--error" role="alert">
-          Sign-in could not be started. Please try again.
+          {t('Sign-in could not be started. Please try again.')}
         </p>
       )}
     </div>
@@ -111,8 +114,8 @@ function SignedInControls({
   onAccessTokenChange,
   onCurrentUserChange,
 }: SignedInControlsProps) {
+  const { t } = useLanguage()
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>('loading')
-  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [interactionError, setInteractionError] = useState(false)
 
   useEffect(() => {
@@ -131,7 +134,6 @@ function SignedInControls({
       }))
       .then(({ accessToken, user }) => {
         if (!cancelled) {
-          setCurrentUser(user)
           setTokenStatus('ready')
           onAccessTokenChange?.(accessToken)
           onCurrentUserChange?.(user)
@@ -196,13 +198,13 @@ function SignedInControls({
       <div>
         <p className="auth-account">{account.name ?? account.username}</p>
         <p className="auth-status" aria-live="polite">
-          {tokenStatus === 'loading' && 'Preparing secure API access…'}
+          {tokenStatus === 'loading' && t('Preparing secure API access…')}
           {tokenStatus === 'ready' &&
-            `Signed in · API access ready · ${currentUser?.role}`}
+            t('Signed in')}
           {tokenStatus === 'interaction-required' &&
-            'Additional confirmation is required for API access.'}
+            t('Additional confirmation is required for API access.')}
           {tokenStatus === 'error' &&
-            'API access could not be prepared. Please try again.'}
+            t('API access could not be prepared. Please try again.')}
         </p>
       </div>
       {tokenStatus === 'interaction-required' && (
@@ -212,7 +214,7 @@ function SignedInControls({
           disabled={interactionInProgress}
           onClick={requestApiAccess}
         >
-          Continue
+          {t('Continue')}
         </button>
       )}
       <button
@@ -221,11 +223,11 @@ function SignedInControls({
         disabled={interactionInProgress}
         onClick={signOut}
       >
-        Sign out
+        {t('Sign out')}
       </button>
       {interactionError && (
         <p className="auth-status auth-status--error" role="alert">
-          Authentication could not be completed. Please try again.
+          {t('Authentication could not be completed. Please try again.')}
         </p>
       )}
     </div>

@@ -93,7 +93,11 @@ def _create_customer_order(client: TestClient, engine: Engine) -> dict[str, obje
     order_response = client.post(
         "/api/orders",
         headers=_headers(),
-        json={"pickup_location_id": str(location.id)},
+        json={
+            "pickup_location_id": str(location.id),
+            "pickup_date": client.get("/api/pickup-locations/options").json()["days"][0]["date"],
+            "pickup_slot": "16-18",
+        },
     )
     assert order_response.status_code == 201
     return cast(dict[str, object], order_response.json())
@@ -147,7 +151,11 @@ def test_admin_can_create_edit_and_deactivate_pickup_locations(
     checkout_response = client.post(
         "/api/orders",
         headers=_headers(),
-        json={"pickup_location_id": created["id"]},
+        json={
+            "pickup_location_id": created["id"],
+            "pickup_date": client.get("/api/pickup-locations/options").json()["days"][0]["date"],
+            "pickup_slot": "16-18",
+        },
     )
     assert checkout_response.status_code == 409
     assert checkout_response.json()["detail"] == "Pickup location is unavailable"

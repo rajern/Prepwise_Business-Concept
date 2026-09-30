@@ -20,6 +20,7 @@ from prepwise_api.services.cart import (
     remove_user_cart_item,
     set_user_cart_item_quantity,
 )
+from prepwise_api.services.localization import Language
 
 router = APIRouter(prefix="/api/cart", tags=["cart"])
 
@@ -28,9 +29,10 @@ router = APIRouter(prefix="/api/cart", tags=["cart"])
 def get_cart(
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
 ) -> CartResponse:
     """Return the authenticated user's persisted cart."""
-    return get_user_cart(session, user.id)
+    return get_user_cart(session, user.id, lang=lang)
 
 
 @router.post("/items", response_model=CartResponse, status_code=status.HTTP_201_CREATED)
@@ -38,10 +40,11 @@ def add_cart_item(
     payload: CartItemCreate,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
 ) -> CartResponse:
     """Add an available meal, or increment its existing cart quantity."""
     try:
-        return add_user_cart_item(session, user.id, payload.meal_id, payload.quantity)
+        return add_user_cart_item(session, user.id, payload.meal_id, payload.quantity, lang=lang)
     except ApplicationServiceError as error:
         raise_service_http_error(error)
 
@@ -52,10 +55,11 @@ def change_cart_item_quantity(
     payload: CartItemQuantityUpdate,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
 ) -> CartResponse:
     """Set a cart quantity while enforcing ownership and availability."""
     try:
-        return set_user_cart_item_quantity(session, user.id, item_id, payload.quantity)
+        return set_user_cart_item_quantity(session, user.id, item_id, payload.quantity, lang=lang)
     except ApplicationServiceError as error:
         raise_service_http_error(error)
 
@@ -65,10 +69,11 @@ def remove_cart_item(
     item_id: UUID,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
 ) -> Response:
     """Remove one item from the authenticated user's cart."""
     try:
-        remove_user_cart_item(session, user.id, item_id)
+        remove_user_cart_item(session, user.id, item_id, lang=lang)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except ApplicationServiceError as error:
         raise_service_http_error(error)

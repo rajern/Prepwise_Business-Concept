@@ -45,6 +45,13 @@ rotations must update that reference and deploy/restart before verification; do 
 latest-version secret is picked up immediately. Bicep currently uses the versionless secret URI:
 an infrastructure reapply restores latest-version rotation behavior, not the pinned version.
 
+Historical database-secret versions are disabled rather than deleted. The former privileged
+database login is no longer used by the serving app, but disabling that login was denied to the
+migration credential and needs a Neon administrator (TASKS N8). Runtime has no enabled access
+to its historical credentials. Do not infer that the old account itself has been retired.
+The manual `prepwise-set-user-role` operator command now needs an authorized migration/operator
+connection: runtime intentionally cannot update customer roles through SQL.
+
 The backend additionally forces `sslmode=require` for production runtime connections. Local
 development and CI keep using their existing local/containerised PostgreSQL configuration without
 forced TLS or any Neon dependency.

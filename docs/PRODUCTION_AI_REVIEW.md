@@ -78,8 +78,18 @@ not independently certify provider-side logging/retention.
 The Container App database secret reference is version-pinned to the new Key Vault version.
 The previous version is retained for controlled recovery. Because the runtime identity can read
 historical versions under this secret scope, the former privileged login must be disabled and
-its existing sessions ended after the replacement release is verified, not left active.
-Deployment/retirement outcome is recorded in TASKS; provisioning alone is not completion.
+its existing sessions ended after the replacement release is verified. The migration credential's
+attempt to set NOLOGIN was denied (SQLSTATE 42501); that legacy-account action remains N8 and
+requires a Neon role administrator. No permission bypass was attempted. Both older Key Vault
+versions are now disabled (not deleted), so runtime cannot retrieve the privileged old values;
+only the new version remains enabled. Re-enabling them requires an authorized recovery operator.
+
+Release `5f1daed` passed all required CI, production deploy and smoke in workflow
+[36702959276](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/36702959276).
+Revision `ca-prepwise-prod--0000041` is ready and serving that image. Azure exec inside the
+container confirmed the configured database login is `prepwise_app_runtime`; public probes and
+post-switch readiness passed. This does not claim the former database login itself is disabled,
+or that a fresh production customer JWT/write journey was exercised.
 
 The deploy workflow now applies `prepwise_api.runtime_permissions` using the migration owner
 after Alembic. No broad future-table defaults are granted: introducing an ORM table requires an
@@ -87,8 +97,9 @@ explicit reviewed map update (enforced by a test). Isolated PostgreSQL tests exe
 admin catalogue/pickup/order flows, cart, confirmation/checkout, quota and local-vector retrieval;
 negative tests exercise permission denials. These are not production customer/JWT or paid AI tests.
 
-Recovery requires an authorized migration operator to re-enable the former login if necessary,
-restore the previous Key Vault version/reference, then deploy/restart and verify. This is a
+Recovery requires an authorized operator to re-enable a previous Key Vault version/reference
+and, if retired separately, a Neon role administrator to restore that login, then deploy/restart
+and verify. The currently available migration credential cannot disable the former login. This is a
 credential/privilege change, so the code-only automatic rollback procedure does not apply.
 One-time helpers require explicit approval flags and refuse existing-role/repeated switches.
 

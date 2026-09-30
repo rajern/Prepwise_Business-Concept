@@ -24,6 +24,7 @@ def main() -> int:
     if not re.fullmatch(r"[a-f0-9]{40}", args.expected_sha):
         parser.error("Exact expected release SHA required")
     try:
+        phase = "release_preflight"
         app: dict[str, Any] = az_json(
             "containerapp", "show", "--resource-group", RESOURCE_GROUP, "--name", APP
         )
@@ -72,9 +73,11 @@ def main() -> int:
         if make_url(current["value"]).username != RUNTIME_ROLE:
             raise RuntimeError("Current secret is not the replacement runtime")
         runtime = engine_for(current["value"])
+        phase = "validate_replacement_login"
         validate_runtime(runtime)
         runtime.dispose()
         owner = engine_for(migration["value"])
+        phase = "observe_application_sessions"
         with owner.begin() as connection:
             # Runtime probe above is disposed; remaining sessions follow public app traffic.
             live = connection.scalar(
@@ -84,8 +87,10 @@ def main() -> int:
             if not live:
                 raise RuntimeError("No replacement application database session observed")
             quoted = connection.dialect.identifier_preparer.quote_identifier(old_login)
+            phase = "disable_previous_login"
             connection.exec_driver_sql(f"ALTER ROLE {quoted} NOLOGIN")
         with owner.begin() as connection:
+            phase = "terminate_previous_sessions"
             connection.execute(
                 text(
                     "SELECT pg_terminate_backend(pid) FROM pg_stat_activity "
@@ -117,7 +122,16 @@ def main() -> int:
         )
         return 0
     except Exception as error:
-        print(json.dumps({"error_type": type(error).__name__}))
+        original = getattr(error, "orig", error)
+        print(
+            json.dumps(
+                {
+                    "error_type": type(error).__name__,
+                    "phase": phase,
+                    "sqlstate": getattr(original, "sqlstate", None),
+                }
+            )
+        )
         return 1
 
 

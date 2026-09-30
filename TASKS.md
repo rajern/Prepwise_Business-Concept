@@ -24,18 +24,19 @@ If none exists, stop; do not invent tasks, repeat unchanged failures or reopen c
 Only the main agent updates this queue. At most two subagents may work on disjoint subtasks.
 Never overwrite unrelated changes or start a second worker on an already claimed task.
 
-**Active task:** N7 (replacement provisioned; deployment/retirement verification in progress).
-**Next independent task:** N6 (approved image style; implementation may follow round 2 delivery).
+**Active task:** N6 (Ready, round 3). **Next independent task:** None.
+Legacy-role cleanup N8 requires a Neon administrator; it does not block the approved image work.
 
 | Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
 | --- | --- | --- | --- | --- |
 | 1 / N1 | Prepare nightly queue and verify delivery access | Complete, 2026-09-30 | None | Clean baseline `6e33e57`; Git remote and push dry-run pass with approved network access; Azure login valid; existing CI/deploy successful; public frontend, health, bilingual meals, pickup windows and CORS checked. Scheduler and unattended permission limitations are documented below. |
 | 2 / N2 | Document and validate a code-only rollback runbook | Complete, 2026-09-30 | N1 | [ROLLBACK.md](docs/ROLLBACK.md) records exact baseline `5f80726`, fresh no-op preflight, ordinary revert/redeploy, partial-deploy handling and fail-closed stops. Commands validated read-only; no actual rollback/drill or automatic controller enabled. |
-| 3 / N3 | Verify production assistant runtime grants/configuration | Review complete; security finding open in N7 | N1 | [Production review](docs/PRODUCTION_AI_REVIEW.md): approved limits/auth, anonymous 401, scoped Key Vault bindings, TLS and migrations verified read-only. Runtime has needed quota DML but also `neon_superuser` and broad administrative attributes; least privilege is NOT satisfied. No production permissions/data changed. |
-| 3a / N7 | Remediate overprivileged production database runtime role | In progress, owner-approved 2026-09-30 | N3 | Dedicated restricted SQL-created login provisioned, exact grants and TLS checked; Key Vault/reference switched. Deployment and retiring the former privileged login remain. Owner approved controlled switch, recovery and commit/push/deploy. No blind inherited-grant revocation or business-row changes. |
+| 3 / N3 | Verify production assistant runtime grants/configuration | Complete review and replacement verification | N1 | Initial overprivilege finding remediated for the serving application by N7. Approved limits/auth, Key Vault bindings, TLS, migrations and exact replacement privileges verified. Legacy administrator-role retirement remains N8; see [production review](docs/PRODUCTION_AI_REVIEW.md). |
+| 3a / N7 | Remediate overprivileged production database runtime role | Replacement deployed and verified, 2026-09-30 | N3 | Restricted SQL-created login/grants/TLS verified; serving container confirms replacement username. Key Vault/reference switched and both historical credential versions disabled, not deleted. Exact release CI/deploy/public checks passed. No business-row changes; former DB login itself remains N8. |
+| 3b / N8 | Retire former privileged database login | Blocked: Neon administrator action | N7 | Migration credential received SQLSTATE 42501 at ALTER ROLE NOLOGIN; transaction rolled back, no bypass attempted. Owner/Neon role administrator must disable/rotate the former unused privileged login and end its sessions using an authorized control-plane/operator plan. Historical KV versions are disabled and recoverable; do not re-enable them for runtime. No repeated unattended attempts. |
 | 4 / N4 | Evaluate the selected model with the new 800-token cap | Complete bounded smoke, 2026-09-30 | N3 review | Owner approved max 10 attempts/USD 1. Exactly 10 calls, five synthetic isolated cases passed; estimated USD 0.041908, conservative reservation USD 0.353880. No production data or embeddings. Incomplete handling tested offline; no incomplete live response. [Evidence](docs/AI_EVAL_ROUND2.md). This approval is exhausted; no paid rerun/full eval without new approval. |
 | 5 / N5 | Approve one meal-image sample | Complete, owner-approved 2026-09-30 | None | Owner approved [chicken-teriyaki-v1.png](docs/image-samples/chicken-teriyaki-v1.png): realistic photo, natural light and neutral background. Reuse this sample in the final set. [Prompt and caveats](docs/image-samples/README.md). |
-| 6 / N6 | Generate and integrate the complete meal-image set | Ready after N7 delivery | N5, N7 delivery | Generate the remaining 11 matching meal images with the built-in image tool, reuse the sample, integrate and verify mobile/desktop. Use illustrative AI-image disclosure. No additional paid model evals or external image API fallback without separate approval. |
+| 6 / N6 | Generate and integrate the complete meal-image set | Ready | N5, N7 delivery | Generate the remaining 11 matching meal images with the built-in image tool, reuse the sample, integrate and verify mobile/desktop. Use illustrative AI-image disclosure. No additional paid model evals or external image API fallback without separate approval. |
 
 ### Round 2 delivery record — 2026-09-30
 
@@ -66,7 +67,17 @@ Never overwrite unrelated changes or start a second worker on an already claimed
 - Pre-release verification: 150 backend tests passed with all six PostgreSQL integration tests;
   the additional grant-map completeness test passed separately (151 total). Ruff/format/full
   strict mypy passed. Frontend lint/types/build and all 36 tests passed after the cooldown fix.
-- Release SHA, CI/deploy and final login retirement will be recorded after verification.
+- Pushed release `5f1daed66f07906390978e31509a0b7829821b45`, commit message
+  `Harden runtime database access and complete round 2 verification`.
+  [Workflow 36702959276](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/36702959276)
+  completed successfully: all six required CI jobs, deployment and production smoke tests.
+  Ready revision `ca-prepwise-prod--0000041` serves the SHA-tagged image. Read-only Azure exec
+  confirms the container's configured database username is the restricted replacement role.
+  Final frontend/live/ready, 12 bilingual meals and five pickup days/two windows passed.
+- Former-login NOLOGIN was denied (42501), recorded as N8, not bypassed or claimed complete.
+  Disabled both older KV versions while leaving the active replacement enabled; ready remains ok.
+  Those versions were not deleted and an authorized operator can recover them. Local test PG
+  was stopped after verification. No extra paid model calls were made.
 
 ### Nightly execution and release rules
 

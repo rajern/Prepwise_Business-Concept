@@ -5,6 +5,44 @@ delivery path. It does not install an automatic rollback controller or change pr
 It permits a new, ordinary Git revert commit only after every gate below is satisfied.
 An unavailable check is a failed gate, not permission to assume safety.
 
+## Customer groups/cancellation release and compatible recovery (2026-10-01)
+
+The pending `f6a7b8c9d0e1` migration adds persistent cart groups and the `cancelled` order status.
+The prior release would combine all cart rows at checkout and cannot decode cancelled orders.
+Therefore a plain Git revert to the historical baseline is NOT a safe rollback after feature use.
+The migration's downgrade deliberately refuses to discard groups or cancelled business rows;
+it is not a recovery plan. Never solve compatibility by deleting orders/groups, downgrading the
+database or temporarily weakening authentication/confirmation controls.
+
+The owner authorized release validation and conditional delivery, including paid changed-chunk
+embeddings, on2026-10-01. The resumed isolated PostgreSQL run passed all177 tests and migrations;
+all9 browser scenarios passed against that migrated DB. No production business test writes.
+
+Delivery uses two contiguous commits, pushed together after validation:
+
+1. **Compatible feature recovery point:** groups/cancellation/schema/grants, current KB and
+   frontend, search improvements and existing approved AI guards, with the authenticated JSON
+   assistant endpoint. Frontend accepts JSON even when requesting SSE. Validated171 backend
+   tests,54 frontend tests,9 migrated-PG browser scenarios and Docker build; a synthetic image
+   drill proved scoped group checkout, other-group retention, cancelled-history decoding and
+   authenticated JSON fallback without any provider calls. Exact SHA is recorded at delivery.
+2. **SSE delivery commit:** only the assistant HTTP endpoint,6 streaming regressions and release
+   evidence. Schema/grants/KB/domain/frontend/seed/dependencies are identical to point1.
+
+For a confirmed SSE endpoint regression, fresh remote/queue/image/runtime/schema/index checks
+must pass, then one ordinary revert of commit2 can restore point1's JSON route through existing
+CI/deploy, without database/index rollback. Verify the diff against point1: only that route,
+its tests and evidence may differ; reject any protected/schema/knowledge/domain change.
+Never revert commit1 or select `5a99117` after migration/feature use. Point1 is locally validated,
+not a previously serving production artifact; this is NOT a completed production rollback drill
+or an automatic controller. Domain/feature defects are outside this narrow recovery and require
+a reviewed compatible forward repair. Mixed/failed migration/index/deploy remains a stop and
+inspect condition, not permission for blind revert. Stop after one failed recovery attempt.
+
+The single-code-only-commit/no-op procedure below remains applicable to later eligible releases.
+For this two-commit feature release only commit2 is the eligible candidate and point1 its base;
+the code-only recovery itself must make no new migration, seed, role or embedding changes.
+
 ## Known public baseline (2026-09-30)
 
 | Item | Observed value |

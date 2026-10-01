@@ -7,6 +7,7 @@ export type OrderStatus =
   | 'preparing'
   | 'ready_for_pickup'
   | 'completed'
+  | 'cancelled'
 
 export interface OrderSummary {
   id: string
@@ -17,6 +18,8 @@ export interface OrderSummary {
   pickup_end_at: string
   pickup_location_name: string
   pickup_location_address: string
+  can_cancel?: boolean
+  cancellation_deadline?: string
 }
 
 export interface OrderItem {
@@ -54,11 +57,16 @@ export async function createOrder(
   pickupDate: string,
   pickupSlot: string,
   language: Language = 'no',
+  groupId?: string | null,
 ): Promise<OrderDetail> {
   return orderRequest(`/api/orders?lang=${language}`, accessToken, {
     method: 'POST',
-    body: JSON.stringify({ pickup_location_id: pickupLocationId, pickup_date: pickupDate, pickup_slot: pickupSlot }),
+    body: JSON.stringify({ pickup_location_id: pickupLocationId, pickup_date: pickupDate, pickup_slot: pickupSlot, ...(groupId ? { group_id: groupId } : {}) }),
   })
+}
+
+export async function cancelOrder(accessToken: string, orderId: string, language: Language): Promise<OrderDetail> {
+  return orderRequest(`/api/orders/${orderId}/cancel?lang=${language}`, accessToken, { method: 'POST' })
 }
 
 async function orderRequest<T>(

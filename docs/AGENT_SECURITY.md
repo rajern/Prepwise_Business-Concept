@@ -76,6 +76,29 @@ capabilities remain limited even if a model answers an unrelated question.
 
 ## Prompt-controlled behavior and remaining gaps
 
+### Customer-experience update (2026-10-01, local implementation)
+
+- Successful add/remove services commit and immediately read the authoritative cart. This fresh
+  read is validated as CartResponse and reused for verification, instead of asking the model to
+  select get_cart again. Failed writes still trigger a separate read; failed verification stops
+  the workflow. No tool/write/token limit was increased. Five-item regression now uses seven
+  mocked model rounds instead of nine; this is not a measured live latency/quality result.
+- JSON and SSE share authentication, atomic admission and quotas. SSE text is labelled as a
+  draft, never persisted as confirmed history until done, reset before a tool continuation and
+  removed on errors. Neither transport automatically resubmits a possibly executed write.
+  Producer cancellation, bounded queue publication and transaction cleanup release the durable
+  quota lease once after work stops; a stalled client cannot retain provider work indefinitely.
+- Diet metadata is authored for the unchanged declared seed recipes. Unknown/edited recipes
+  remain unclassified; absence of a meat word is not evidence of vegetarian/allergen safety.
+  Tool pages include explicit coverage/counts so filtered/partial results cannot legitimately
+  be described as an exhaustive catalogue. Actual correct model interpretation is still
+  prompt-controlled and requires an owner-approved live eval to establish reliability.
+- Chat cannot cancel or reschedule orders, or silently choose a named pickup group. Those
+  changes use the authenticated UI and server rules. A legacy confirmation becomes invalid
+  when named-group items appear; the user must review groups in the cart.
+- Existing code-only rollback is not valid for this additive schema/persisted-state update;
+  do not deploy without the separately reviewed compatibility/release plan.
+
 Explicit current-message intent, relevant-question refusal, interpreting objective
 meal constraints and ignoring prompt injections are prompt-controlled. Strict tool
 schemas cannot prove that a user intended a valid cart write. Cart changes do not

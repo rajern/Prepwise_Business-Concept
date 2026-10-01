@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { AssistantPanel } from './AssistantPanel'
@@ -11,6 +11,49 @@ afterEach(() => {
 })
 
 describe('AssistantPanel', () => {
+  it('shows streamed text as a draft, stores only confirmation and refreshes the cart', async () => {
+    let producer!: ReadableStreamDefaultController<Uint8Array>
+    const body = new ReadableStream<Uint8Array>({ start(controller) { producer = controller } })
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { headers: { 'Content-Type': 'text/event-stream' } })))
+    render(<AssistantPanel accessToken="token" userId="stream-user" onStateChange={refresh} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Add a meal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    const send = (event: unknown) => producer.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`))
+    await act(async () => send({ type: 'delta', text: 'Possible result' }))
+    expect(await screen.findByText('Possible result')).toBeInTheDocument()
+    expect(screen.getByText('Draft — checking before confirmation')).toBeInTheDocument()
+    expect(sessionStorage.getItem('prepwise-chat')).not.toContain('Possible result')
+    await act(async () => send({ type: 'reset' }))
+    await waitFor(() => expect(screen.queryByText('Possible result')).not.toBeInTheDocument())
+    await act(async () => { send({ type: 'done', reply: 'Verified cart', model: 'offline', response_id: 'id' }); producer.close() })
+    expect(await screen.findByText('Verified cart')).toBeInTheDocument()
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(sessionStorage.getItem('prepwise-chat')).toContain('Verified cart')
+    expect(screen.queryByText('Draft — checking before confirmation')).not.toBeInTheDocument()
+  })
+
+  it('withdraws failed drafts and does not retry a possibly executed write', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('data: {"type":"delta","text":"Unverified success"}\n\ndata: {"type":"error","status":"503"}\n\n'))
+        controller.close()
+      },
+    }), { headers: { 'Content-Type': 'text/event-stream' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    render(<AssistantPanel accessToken="token" userId="stream-user" onStateChange={refresh} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Add a meal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByRole('alert')
+    expect(screen.queryByText('Unverified success')).not.toBeInTheDocument()
+    expect(sessionStorage.getItem('prepwise-chat')).not.toContain('Unverified success')
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    expect(fetchMock).toHaveBeenCalledOnce()
+  })
+
   it('describes both live data and service guidance capabilities', () => {
     render(<AssistantPanel accessToken="customer-token" />)
     fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))

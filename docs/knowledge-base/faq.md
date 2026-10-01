@@ -8,7 +8,8 @@ It is not a commercial meal service and does not fulfil real meal orders.
 ## How does ordering work?
 
 Browse the available meals, sign in, add meals to your cart, open the cart from the top navigation,
-and choose a pickup location, date and time window before placing a demonstration order.
+and choose a pickup location, date and time window for each pickup group before placing a
+demonstration order. Groups allow different days/locations; each becomes a separate order.
 The next five days, starting tomorrow, are available with 16:00–18:00 or 18:00–20:00 windows
 in Europe/Oslo. There is no automatic same-day booking.
 
@@ -32,4 +33,5 @@ No. Orders are currently available for pickup only.
 
 ## Where can I see my orders?
 
-Signed-in customers can view their previous and current orders from their account.
+Signed-in customers see upcoming active orders above the meal menu. The Order history link
+in the top navigation shows completed/cancelled orders. Order details can be opened and closed.

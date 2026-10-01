@@ -302,7 +302,7 @@ describe('App', () => {
         return { ok: true, json: async () => [meal] }
       }
       if (path === '/api/cart') {
-        return { ok: true, json: async () => cart }
+        return { ok: true, json: async () => orderCreated ? { items: [], total_quantity: 0, total_nok: '0.00' } : cart }
       }
       if (path === '/api/pickup-locations/options') {
         return { ok: true, json: async () => ({ timezone: 'Europe/Oslo', days: [{ date: '2026-10-01', slots: [{ id: '16-18', start_at: '2026-10-01T14:00:00Z', end_at: '2026-10-01T16:00:00Z' }] }] }) }
@@ -352,6 +352,8 @@ describe('App', () => {
     expect(await screen.findByText(`1 × ${meal.name}`)).toBeInTheDocument()
     expect(screen.getAllByText('Received')).toHaveLength(2)
 
+    fireEvent.click(screen.getAllByRole('button', { name: 'Close order' })[0])
+    expect(screen.queryByText(`1 × ${meal.name}`)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'View order' }))
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(

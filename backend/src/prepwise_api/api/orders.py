@@ -13,6 +13,7 @@ from prepwise_api.schemas import OrderCreate, OrderDetailResponse, OrderSummaryR
 from prepwise_api.services import ApplicationServiceError
 from prepwise_api.services.localization import Language
 from prepwise_api.services.orders import (
+    cancel_user_order,
     create_user_order,
     get_user_order,
     list_user_orders,
@@ -37,6 +38,7 @@ def create_order(
             payload.pickup_location_id,
             pickup_date=payload.pickup_date,
             pickup_slot=payload.pickup_slot,
+            group_id=payload.group_id,
             lang=lang,
         )
     except ApplicationServiceError as error:
@@ -51,6 +53,23 @@ def create_order(
         },
     )
     return created_order
+
+
+@router.post("/{order_id}/cancel", response_model=OrderDetailResponse)
+def cancel_order(
+    order_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
+) -> OrderDetailResponse:
+    try:
+        cancelled = cancel_user_order(session, user.id, order_id, lang=lang)
+    except ApplicationServiceError as error:
+        raise_service_http_error(error)
+    logger.info(
+        "Order cancelled", extra={"event": "order.cancelled", "order_id": str(cancelled.id)}
+    )
+    return cancelled
 
 
 @router.get("", response_model=list[OrderSummaryResponse])

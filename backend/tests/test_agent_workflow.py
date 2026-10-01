@@ -115,7 +115,9 @@ def _eligible_meals(session: Session, limit: int) -> list[Meal]:
     )
 
 
-def test_multi_step_workflow_forces_final_cart_verification(engine: Engine) -> None:
+def test_multi_step_workflow_reuses_fresh_cart_reads_without_extra_model_rounds(
+    engine: Engine,
+) -> None:
     with Session(engine) as session:
         context = _workflow_context(session)
         meals = _eligible_meals(session, 5)
@@ -135,9 +137,7 @@ def test_multi_step_workflow_forces_final_cart_verification(engine: Engine) -> N
                 )
                 for index, meal in enumerate(meals, start=1)
             ],
-            _text_response("I added five meals.", 6, preserve_output=True),
-            _tool_response("get_cart", "{}", 7),
-            _text_response("Added five matching meals and verified the cart.", 8),
+            _text_response("Added five matching meals and verified the cart.", 6),
         ]
         create = AsyncMock(side_effect=responses)
         client = SimpleNamespace(responses=SimpleNamespace(create=create))
@@ -161,14 +161,11 @@ def test_multi_step_workflow_forces_final_cart_verification(engine: Engine) -> N
     assert reply.text == "Added five matching meals and verified the cart."
     assert cart.total_quantity == 5
     assert {item.meal.name for item in cart.items} == expected_names
-    assert create.await_count == 9
-    assert create.await_args_list[7].kwargs["tool_choice"] == {
-        "type": "function",
-        "name": "get_cart",
-    }
-    final_input = create.await_args_list[8].kwargs["input"]
+    assert create.await_count == 7
+    final_input = create.await_args_list[6].kwargs["input"]
     assert final_input[-1]["type"] == "function_call_output"
     assert all(name in final_input[-1]["output"] for name in expected_names)
+    assert '"authoritative_cart_verification"' in final_input[-1]["output"]
 
 
 def test_multi_step_workflow_recovers_from_stock_change_and_blocks_repeat(

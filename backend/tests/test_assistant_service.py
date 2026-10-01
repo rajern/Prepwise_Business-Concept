@@ -55,6 +55,10 @@ class RecordingToolRegistry(AssistantToolRegistry):
         context: AssistantToolContext,
     ) -> str:
         self.calls.append((name, str(arguments), context.user.external_subject))
+        if name in {"get_cart", "add_to_cart", "remove_from_cart"}:
+            return (
+                '{"ok":true,"data":{"items":[],"groups":[],"total_quantity":0,"total_nok":"0.00"}}'
+            )
         return '{"ok":true,"data":[{"name":"Protein Bowl","protein_grams":"45.00"}]}'
 
 
@@ -493,7 +497,7 @@ def test_executed_write_limit_stops_seventh_write() -> None:
             output=[
                 ResponseFunctionToolCall(
                     type="function_call",
-                    name="add_to_cart",
+                    name="prepare_order",
                     arguments="{}",
                     call_id=f"call_{index}",
                 )

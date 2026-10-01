@@ -17,6 +17,7 @@ RUNTIME_TABLE_PRIVILEGES: dict[str, tuple[str, ...]] = {
     "meal_allergens": ("SELECT", "INSERT", "DELETE"),
     "pickup_locations": ("SELECT", "INSERT", "UPDATE"),
     "cart_items": ("SELECT", "INSERT", "UPDATE", "DELETE"),
+    "cart_groups": ("SELECT", "INSERT", "UPDATE", "DELETE"),
     "orders": ("SELECT", "INSERT", "UPDATE"),
     "order_items": ("SELECT", "INSERT"),
     "order_confirmations": ("SELECT", "INSERT", "UPDATE"),

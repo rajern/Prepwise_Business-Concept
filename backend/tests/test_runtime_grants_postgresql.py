@@ -207,6 +207,25 @@ def test_runtime_grants_support_real_application_flows(
     )
     assert checkout.items[0].meal_id == meal.id
 
+    from prepwise_api.schemas.cart import CartGroupWrite
+    from prepwise_api.services.cart import remove_user_cart_group, write_user_cart_group
+    from prepwise_api.services.orders import cancel_user_order
+
+    group_cart = write_user_cart_group(
+        session,
+        user.id,
+        CartGroupWrite(pickup_location_id=location.id, pickup_date=day.date, pickup_slot="16-18"),
+    )
+    group_id = group_cart.groups[0].id
+    add_user_cart_item(session, user.id, meal.id, 1, group_id=group_id)
+    grouped_order = create_user_order(
+        session, user.id, location.id, pickup_date=day.date, pickup_slot="16-18", group_id=group_id
+    )
+    cancelled_order = cancel_user_order(session, user.id, grouped_order.id)
+    assert cancelled_order.status == OrderStatus.CANCELLED
+    assert not cancelled_order.can_cancel
+    remove_user_cart_group(session, user.id, group_id)
+
     event_id = reserve_assistant_request(session, user.id, Settings(app_env="production"))
     release_assistant_request(session, event_id)
     event = session.get(AssistantUsageEvent, event_id)

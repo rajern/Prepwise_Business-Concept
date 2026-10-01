@@ -34,22 +34,28 @@ function boundedHistory(messages: ChatMessage[]): ChatMessage[] {
   }
   return result
 }
-export function AssistantPanel({ accessToken, userId = null, onStateChange }: AssistantPanelProps) {
+export function AssistantPanel(props: AssistantPanelProps) {
+  return <AssistantConversation key={props.userId ?? (props.accessToken ? 'signed-in' : 'signed-out')} {...props} />
+}
+function AssistantConversation({ accessToken, userId = null, onStateChange }: AssistantPanelProps) {
   const { t, language } = useLanguage()
   const [open, setOpen] = useState(false)
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(userId))
   const [error, setError] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [stage, setStage] = useState<'thinking' | 'tools'>('thinking')
   const [retryAt, setRetryAt] = useState(0)
   const [secondsLeft, setSecondsLeft] = useState(0)
   const viewport = useRef<HTMLDivElement>(null)
   const textarea = useRef<HTMLTextAreaElement>(null)
   const launcher = useRef<HTMLButtonElement>(null)
   const active = useRef(true)
+  const pending = useRef<AbortController | null>(null)
   useEffect(() => {
     active.current = true
-    return () => { active.current = false }
+    return () => { active.current = false; pending.current?.abort() }
   }, [])
   useEffect(() => {
     try {
@@ -67,7 +73,7 @@ export function AssistantPanel({ accessToken, userId = null, onStateChange }: As
   useEffect(() => { if (open) textarea.current?.focus() }, [open])
   useEffect(() => {
     if (viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight
-  }, [messages, isSending, open])
+  }, [messages, draft, isSending, open])
   function closeChat() { setOpen(false); launcher.current?.focus() }
   async function submitMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -77,12 +83,26 @@ export function AssistantPanel({ accessToken, userId = null, onStateChange }: As
     setMessages((previous) => [...previous, { role: 'user', content: trimmed } as ChatMessage].slice(-40))
     setMessage('')
     setIsSending(true)
+    setDraft('')
+    setStage('thinking')
     setError(null)
+    const controller = new AbortController()
+    pending.current = controller
+    const current = () => active.current && pending.current === controller && !controller.signal.aborted
     try {
-      const response = await sendAssistantMessage(accessToken, trimmed, undefined, language, history)
-      if (active.current) setMessages((previous) => [...previous, { role: 'assistant', content: response.reply } as ChatMessage].slice(-40))
+      const response = await sendAssistantMessage(accessToken, trimmed, controller.signal, language, history, (event) => {
+        if (!current()) return
+        if (event.type === 'delta') setDraft((previous) => (previous + event.text).slice(0, 20000))
+        if (event.type === 'reset') setDraft('')
+        if (event.type === 'progress') setStage(event.stage)
+      })
+      if (current()) {
+        setDraft('')
+        setMessages((previous) => [...previous, { role: 'assistant', content: response.reply } as ChatMessage].slice(-40))
+      }
     } catch (reason: unknown) {
-      if (!active.current) return
+      if (!current()) return
+      setDraft('')
       let text = t('The AI assistant is unavailable right now. Please try again.')
       if (reason instanceof ApiRequestError) {
         if (reason.status === 401) text = t('Your session has expired. Sign in again.')
@@ -98,9 +118,9 @@ export function AssistantPanel({ accessToken, userId = null, onStateChange }: As
       setMessages((previous) => previous.slice(0, -1))
     } finally {
       // Partial writes must be reflected even if the last model call fails.
-      if (active.current) {
+      if (current()) {
         try { await onStateChange?.() } catch { /* Parent reports refresh failures. */ }
-        setIsSending(false)
+        if (current()) { setIsSending(false); pending.current = null }
       }
     }
   }
@@ -113,7 +133,8 @@ export function AssistantPanel({ accessToken, userId = null, onStateChange }: As
         <div className="chat-messages" ref={viewport} role="log" aria-label={t('Ask Prepwise')} aria-live="polite" aria-relevant="additions text">
           {messages.length === 0 && <div className="chat-welcome"><p>{t('Ask about meals, or let me help with your cart.')}</p><p>{t('Ask about available meals, your cart and orders, pickup, storage, reheating, allergens, or other Prepwise guidance.')}</p></div>}
           {messages.map((item, index) => <div className={'chat-message chat-message--' + item.role} key={index}><span>{item.role === 'user' ? t('You') : 'Prepwise'}</span><p>{item.content}</p></div>)}
-          {isSending && <p className="chat-typing" role="status">{t('Sending…')}</p>}
+          {draft && <div className="chat-message chat-message--assistant"><span>{t('Draft — checking before confirmation')}</span><p>{draft}</p></div>}
+          {isSending && <p className="chat-typing" role="status">{t(stage === 'tools' ? 'Checking current information…' : 'Thinking…')}</p>}
         </div>
         {error && <div className="assistant-error" role="alert">{error}{secondsLeft > 0 && <span> ({secondsLeft}s)</span>}</div>}
         <form className="assistant-form chat-form" onSubmit={(event) => void submitMessage(event)}>

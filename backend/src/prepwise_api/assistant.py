@@ -2,7 +2,7 @@ import asyncio
 import hashlib
 import json
 import logging
-from collections.abc import Iterable, Iterator
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import lru_cache
@@ -31,6 +31,7 @@ from prepwise_api.assistant_tools import (
 )
 from prepwise_api.assistant_workflow import AssistantWorkflowState
 from prepwise_api.config import Settings, get_settings
+from prepwise_api.schemas import CartResponse
 from prepwise_api.telemetry import record_safe_exception, record_safe_span_exception
 
 assistant_logger = logging.getLogger("prepwise.ai")
@@ -51,7 +52,18 @@ For any question about current Prepwise meals, meal values, availability, cart c
 orders or active pickup locations, use the relevant application tool. Treat application tool output
 as the only authoritative source for that structured data. Never invent, estimate or alter meal
 names, availability, prices, nutrition values, cart contents, orders or pickup locations. If a
-search returns no matches, say so plainly.
+search returns no matches, distinguish "no matches for these filters" from "no meals available".
+For broad dietary requests use search_meals.diet_category, with query=null: "med kjøtt" includes
+chicken, turkey and beef; vegetarian includes dairy and eggs but never fish. Diet categories are
+authored for unchanged declared recipes, not allergy/medical guarantees. Unknown categories must
+not be guessed. For comparisons, exclusions, vague preferences or conversational follow-ups,
+retrieve a broad candidate set once, reason over its ingredients, categories and numeric fields,
+and explain the tradeoffs; do not just echo keyword matches. The full small menu fits one page.
+Use total_matches/total_available/has_more/next_offset to distinguish filtered, partial and full
+results. Follow remaining pages when the user requests all matches. Do not repeat the same search
+unless the data changed or the query genuinely changes. A narrow empty text search is not proof
+that a dietary category does not exist: broaden once before making an availability claim.
+When unknown_diet_count is nonzero, acknowledge unclassified recipes if claiming dietary coverage.
 Use get_pickup_locations for questions asking where or at which current locations an order can be
 collected. Use search_knowledge only for general pickup rules and policy.
 Use get_pickup_options for bookable dates and slots. prepare_order requires an explicit pickup
@@ -90,12 +102,18 @@ For multi-step requests, first retrieve authoritative candidates, then check eve
 constraint against the returned fields before selecting items. Perform only the requested writes.
 If a write fails because data changed or validation rejects it, do not retry the identical call;
 choose another valid candidate from the retrieved results when possible, otherwise report the
-shortfall. After any cart write attempt, call get_cart before the final answer and report only the
-cart state returned by that final verification. Never silently add more items than requested.
+shortfall. After any cart write attempt the server attaches authoritative_cart_verification to the
+write result. Report only that verified cart state; do not call get_cart again just to verify the
+same write. Failed verification is a failure, not confirmed success. Never silently add more items
+than requested. Items added through chat go to the unassigned cart group; pickup groups are managed
+in the cart UI. If multiple groups need checkout, direct the customer there instead of silently
+combining them or choosing a group. Cancellation and rescheduling use the website buttons, not
+chat tools; cancellation is allowed only before midnight at the start of the pickup day in Oslo.
 """
 _MAX_MODEL_ROUNDS = 12
 _MAX_TOOL_CALLS = 10
 _MAX_WRITE_CALLS = 6
+AssistantEventCallback = Callable[[dict[str, str]], Awaitable[None]]
 
 
 def assistant_prompt_fingerprint() -> str:
@@ -173,6 +191,20 @@ class AssistantService:
         request_id: str,
         tool_context: AssistantToolContext,
     ) -> AssistantReply:
+        return await self.respond_with_events(
+            message=message,
+            request_id=request_id,
+            tool_context=tool_context,
+        )
+
+    async def respond_with_events(
+        self,
+        *,
+        message: str,
+        request_id: str,
+        tool_context: AssistantToolContext,
+        on_event: AssistantEventCallback | None = None,
+    ) -> AssistantReply:
         if not self._settings.assistant_enabled:
             raise AssistantUnavailableError
         try:
@@ -185,6 +217,7 @@ class AssistantService:
                         message=message,
                         request_id=request_id,
                         tool_context=tool_context,
+                        on_event=on_event,
                     )
         except TimeoutError as error:
             raise AssistantTimeoutError from error
@@ -195,6 +228,7 @@ class AssistantService:
         message: str,
         request_id: str,
         tool_context: AssistantToolContext,
+        on_event: AssistantEventCallback | None = None,
     ) -> AssistantReply:
         model = self._settings.openai_model
         tools = cast(
@@ -259,10 +293,13 @@ class AssistantService:
                             model_call_count += 1
                             agent_step_count += 1
                             try:
+                                if on_event is not None:
+                                    await on_event({"type": "progress", "stage": "thinking"})
                                 response = await self._create_bounded_response(
                                     client,
                                     budget,
                                     token_reservation,
+                                    on_event=on_event,
                                     model=model,
                                     reasoning={"effort": self._settings.openai_reasoning_effort},
                                     instructions=instructions,
@@ -314,9 +351,13 @@ class AssistantService:
                         tool_call_count += len(function_calls)
 
                         input_items.extend(response.output)
+                        if on_event is not None:
+                            await on_event({"type": "reset"})
                         for function_call in function_calls:
                             if monotonic() >= deadline:
                                 raise AssistantTimeoutError
+                            if on_event is not None:
+                                await on_event({"type": "progress", "stage": "tools"})
                             with _tracer.start_as_current_span(
                                 "prepwise.ai.tool",
                                 record_exception=False,
@@ -374,6 +415,34 @@ class AssistantService:
                                 except Exception as error:
                                     record_safe_span_exception(tool_span, error)
                                     raise
+                            if workflow.required_verification_tool is not None:
+                                payload = json.loads(output)
+                                if payload.get("ok") is True:
+                                    # Cart mutation services commit, then call the same
+                                    # authoritative cart reader. Validate and reuse that
+                                    # fresh read; duplicating it wastes the tool budget.
+                                    cart = CartResponse.model_validate(payload.get("data"))
+                                    verified = json.dumps(
+                                        {"ok": True, "data": cart.model_dump(mode="json")}
+                                    )
+                                    workflow.record_tool_result(
+                                        "get_cart", "{}", verified, executed=False
+                                    )
+                                    payload["authoritative_cart_verification"] = json.loads(
+                                        verified
+                                    )
+                                    output = json.dumps(payload, ensure_ascii=False)
+                                else:
+                                    output, tool_call_count, agent_step_count = (
+                                        self._verify_failed_cart_write(
+                                            output,
+                                            workflow,
+                                            tool_context,
+                                            tool_call_count,
+                                            agent_step_count,
+                                            deadline,
+                                        )
+                                    )
                             input_items.append(
                                 {
                                     "type": "function_call_output",
@@ -438,25 +507,68 @@ class AssistantService:
             _record_failure(error, model, "ai.response.unavailable")
             raise AssistantUnavailableError from error
 
+    def _verify_failed_cart_write(
+        self,
+        output: str,
+        workflow: AssistantWorkflowState,
+        tool_context: AssistantToolContext,
+        tool_call_count: int,
+        agent_step_count: int,
+        deadline: float,
+    ) -> tuple[str, int, int]:
+        if tool_call_count >= _MAX_TOOL_CALLS or monotonic() >= deadline:
+            raise AssistantUnavailableError
+        with _tracer.start_as_current_span(
+            "prepwise.ai.tool",
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
+            span.set_attribute("gen_ai.tool.name", "get_cart")
+            span.set_attribute("prepwise.ai.tool.operation", "read")
+            span.set_attribute("prepwise.ai.step.index", agent_step_count)
+            try:
+                verified = self._tool_registry.execute_json("get_cart", "{}", tool_context)
+                workflow.record_tool_result("get_cart", "{}", verified)
+                _set_tool_span_result(span, verified)
+                if workflow.required_verification_tool is not None:
+                    raise AssistantUnavailableError
+                CartResponse.model_validate(json.loads(verified).get("data"))
+            except Exception as error:
+                record_safe_span_exception(span, error)
+                raise
+        payload = json.loads(output)
+        payload["authoritative_cart_verification"] = json.loads(verified)
+        return json.dumps(payload, ensure_ascii=False), tool_call_count + 1, agent_step_count + 1
+
     async def _create_bounded_response(
         self,
         client: AsyncOpenAI,
         budget: _TokenBudget,
         reservation: int,
+        on_event: AssistantEventCallback | None = None,
         **kwargs: object,
     ) -> Response:
         for attempt in range(self._settings.openai_max_retries + 1):
             if budget.consumed + reservation > self._settings.assistant_max_total_tokens:
                 raise AssistantUnavailableError
             try:
-                response = cast(
-                    Response,
-                    await client.responses.create(**kwargs),  # type: ignore[call-overload]
-                )
+                if on_event is None:
+                    response = cast(
+                        Response,
+                        await client.responses.create(**kwargs),  # type: ignore[call-overload]
+                    )
+                else:
+                    async with client.responses.stream(**kwargs) as stream:  # type: ignore[call-overload]
+                        async for event in stream:
+                            if event.type == "response.output_text.delta":
+                                await on_event({"type": "delta", "text": event.delta})
+                        response = cast(Response, await stream.get_final_response())
             except (APIConnectionError, APIStatusError) as error:
                 # An error can hide billable usage. Charge the full conservative
                 # reservation before deciding whether another attempt is allowed.
                 budget.consumed += reservation
+                if on_event is not None:
+                    await on_event({"type": "reset"})
                 retryable = (
                     isinstance(error, APIConnectionError)
                     or error.status_code

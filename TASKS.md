@@ -24,11 +24,19 @@ If none exists, stop; do not invent tasks, repeat unchanged failures or reopen c
 Only the main agent updates this queue. At most two subagents may work on disjoint subtasks.
 Never overwrite unrelated changes or start a second worker on an already claimed task.
 
-**Active task:** None. **Next independent task:** None; all approved unblocked work is complete.
-Legacy-role cleanup N8 requires a Neon administrator; it does not block the approved image work.
+**Active task:** P4 release validation/delivery, resumed by owner on 2026-10-01.
+**Next independent task:** None. Do not start overlapping work during delivery.
+Two workers completed disjoint order backend / customer frontend changes; main agent completed
+assistant/catalogue/integration. Baseline worktree was clean at `2ac190c` on main; changes remain local.
+Legacy-role cleanup N8 is separate from this batch. Owner reported rotating its password;
+do not claim the role was disabled or retry administrator-only operations.
 
 | Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
 | --- | --- | --- | --- | --- |
+| 0a / P1 | Persistent multi-day cart groups and deadline-based cancellation | Complete local implementation, 2026-10-01 | None | Independent persisted pickup selections, selected-group transactional checkout, others preserved; button cancellation before pickup-day midnight Europe/Oslo; ownership, terminal status and DST offline tests pass. PostgreSQL concurrency/migration/runtime checks remain P4. |
+| 0b / P2 | Customer cart/order/detail UX | Complete local implementation, 2026-10-01 | P1 API contract | Editable groups, active orders above meals, terminal history navigation, close/switch details with stale guards, accessible meal dialog; bilingual/mobile unit and browser checks pass. |
+| 0c / P3 | Assistant search quality and latency | Complete offline implementation, 2026-10-01 | P1 integration contract | Model/low effort/quotas unchanged; all12 menu items fit default page20 with counts; guarded recipe categories/unknowns, non-narrowing ingredient search, committed authoritative cart-read reuse; SSE drafts/final/error/disconnect/backpressure regressions pass. No new paid calls or live model-quality/latency claim. |
+| 0d / P4 | Production release preflight and delivery | In progress: prerequisites validated; delivery pending | P1, P2, P3 | Owner approved changed-chunk embedding calls and conditional push/deploy. Docker responds with reviewed permissions; isolated PostgreSQL migration and all177 tests pass. Same-schema JSON recovery point passed171 tests, Docker build and synthetic persisted-group/cancelled-order drill; all9 browser tests pass against migrated PG and54 frontend unit tests pass. Publish as compatible feature baseline followed by narrowly scoped SSE endpoint commit; no rollback to pre-group code or DB downgrade. Follow exact SHA CI/deploy/public and runtime/index checks. |
 | 1 / N1 | Prepare nightly queue and verify delivery access | Complete, 2026-09-30 | None | Clean baseline `6e33e57`; Git remote and push dry-run pass with approved network access; Azure login valid; existing CI/deploy successful; public frontend, health, bilingual meals, pickup windows and CORS checked. Scheduler and unattended permission limitations are documented below. |
 | 2 / N2 | Document and validate a code-only rollback runbook | Complete, 2026-09-30 | N1 | [ROLLBACK.md](docs/ROLLBACK.md) records exact baseline `5f80726`, fresh no-op preflight, ordinary revert/redeploy, partial-deploy handling and fail-closed stops. Commands validated read-only; no actual rollback/drill or automatic controller enabled. |
 | 3 / N3 | Verify production assistant runtime grants/configuration | Complete review and replacement verification | N1 | Initial overprivilege finding remediated for the serving application by N7. Approved limits/auth, Key Vault bindings, TLS, migrations and exact replacement privileges verified. Legacy administrator-role retirement remains N8; see [production review](docs/PRODUCTION_AI_REVIEW.md). |
@@ -37,6 +45,57 @@ Legacy-role cleanup N8 requires a Neon administrator; it does not block the appr
 | 4 / N4 | Evaluate the selected model with the new 800-token cap | Complete bounded smoke, 2026-09-30 | N3 review | Owner approved max 10 attempts/USD 1. Exactly 10 calls, five synthetic isolated cases passed; estimated USD 0.041908, conservative reservation USD 0.353880. No production data or embeddings. Incomplete handling tested offline; no incomplete live response. [Evidence](docs/AI_EVAL_ROUND2.md). This approval is exhausted; no paid rerun/full eval without new approval. |
 | 5 / N5 | Approve one meal-image sample | Complete, owner-approved 2026-09-30 | None | Owner approved [chicken-teriyaki-v1.png](docs/image-samples/chicken-teriyaki-v1.png): realistic photo, natural light and neutral background. Reuse this sample in the final set. [Prompt and caveats](docs/image-samples/README.md). |
 | 6 / N6 | Generate and integrate the complete meal-image set | Complete, deployed/verified 2026-09-30 | N5, N7 delivery | Eleven native first-attempt images plus reused approved sample; versioned 960 × 720 WebPs, recipe-guarded presentation fallback and NO/EN AI disclosure. Full local tests, six required CI jobs, exact release deployment and public image checks pass. No additional paid model evals or external image API fallback were used. |
+
+### Customer-experience release retry — 2026-10-01
+
+- Owner explicitly approved paid changed-chunk embeddings and conditional commit/push/deploy
+  after successful validation. No new paid conversational model/image evaluation is authorized.
+- Docker engine28.5.1 responds with reviewed access. Created only the dedicated loopback
+  `prepwise-release-test-20261001` container/database; all migrations through `f6a7b8c9d0e1`
+  and all177 backend tests pass, including9 actual PG quota/concurrency/runtime-grant cases.
+- Compatible JSON recovery source retains the full new domain, schema, KB, frontend and guards.
+  It passed171 non-SSE backend tests, lint/format/full mypy, Docker build and an image-level
+  offline synthetic drill: independent groups, scoped checkout, cancelled order/history decode,
+  another group's preservation, authenticated JSON response to the SSE-capable frontend.
+  The new frontend JSON fallback regression passes;54 unit tests/types/lint/build and all9
+  Playwright scenarios pass against migrated PostgreSQL. No provider call in these checks.
+- Delivery will preserve that recovery source as the first commit, then enable only the SSE
+  HTTP endpoint and its6 regressions in a second commit. An incident recovery may revert ONLY
+  that second endpoint commit after fresh gates, leaving all business state/schema/policies.
+  This is not a tested production rollback or permission to revert the entire feature batch.
+  Domain defects require a reviewed forward repair. See [ROLLBACK.md](docs/ROLLBACK.md).
+- Fresh production preflight: remote main `2ac190c`, serving image `5a99117`, ready revision42
+  with100% latest traffic; no queued production run. Runtime read-only role/TLS/least privileges
+  intact, separate migration identity, current schema `e5f6a7b8c9d0`,12 meals/12 chunks.
+  Expected new KB14 chunks differs intentionally; owner-approved deploy will synchronize it.
+
+### Customer-experience batch — 2026-10-01 (initial local verification)
+
+- Owner approved one combined batch with main agent plus two disjoint workers. Cancellation
+  is UI-only, until midnight before pickup day (Oslo), never same-day; pickup changes after
+  ordering require cancellation/new order. No new infrastructure/model or payment integration.
+- Implemented persistent groups, independent selections, scoped checkout, terminal cancellation,
+  upcoming/history navigation and race-safe closable meal/order details. Group migration adds
+  schema/constraints without deleting legacy cart rows; downgrade refuses business-state loss.
+- Assistant now returns all12 current meals within page20 and explicit paging/coverage metadata.
+  Curated categories apply only to unchanged declared recipes; unknown recipes stay unknown.
+  Broad ingredient search no longer loses matches merely because a name/description also matches.
+- Successful cart tools already commit and read the authoritative cart; validate/reuse that fresh
+  read rather than duplicate DB/model calls. Failed writes still need a separate fresh read.
+  Five-item mocked workflow drops9->7 model rounds without increasing10-tool/6-write limits.
+- SSE preserves auth/quota/budget/deadlines. Drafts reset before tools/errors and enter history
+  only after done. Disconnect cancels provider work and clears the lease once; bounded publication
+  prevents a stalled browser retaining a producer. Tests caught/fixed a wait_for cancellation race.
+- Final backend:168 passed,9 PostgreSQL-dependent tests skipped; Ruff lint/format and strict mypy
+  pass. Frontend:53 unit tests, lint, types and production build pass. All9 Playwright scenarios
+  pass against a loopback disposable SQLite API (AI disabled), not migrated PostgreSQL. Eight
+  desktop/mobile screenshots inspected, native dialog Escape/focus and overflow checks pass.
+- Redacted Gitleaks changed/new-source scan and complete63-commit history scan pass. No secrets
+  changed, paid API/embedding/image calls, production business writes, commit, push or deploy.
+- Policy docs now describe the approved cancellation/group workflow; local KB has14 chunks
+  versus previous12. The existing deployment indexer would make new paid embedding calls.
+  P4 records this approval gate plus PostgreSQL and rollback limitations. No Ready task remains.
+- Details/reproduction and limitations: [customer experience evidence](docs/CUSTOMER_EXPERIENCE.md).
 
 ### Round 3 implementation — 2026-09-30
 

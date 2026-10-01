@@ -279,3 +279,190 @@ def test_checkout_stores_selected_window_and_historical_translation(
         session.commit()
     historical = client.get(f"/api/orders/{order['id']}?lang=en", headers=_headers()).json()
     assert historical["items"][0]["meal_name"] == meal.name_en
+
+
+def test_group_checkout_consumes_only_selected_group_and_checks_saved_pickup(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, engine = client_and_engine
+    meal, location = _first_meal_and_location(engine)
+    day = client.get("/api/pickup-locations/options").json()["days"][1]
+    pickup = {
+        "pickup_location_id": str(location.id),
+        "pickup_date": day["date"],
+        "pickup_slot": "18-20",
+    }
+    groups: list[dict[str, str]] = []
+    for _ in range(2):
+        response_groups = client.post("/api/cart/groups", headers=_headers(), json=pickup).json()[
+            "groups"
+        ]
+        group = next(
+            group
+            for group in response_groups
+            if group["id"] not in {existing["id"] for existing in groups}
+        )
+        groups.append(group)
+        assert (
+            client.post(
+                "/api/cart/items",
+                headers=_headers(),
+                json={"meal_id": str(meal.id), "quantity": 1, "group_id": group["id"]},
+            ).status_code
+            == 201
+        )
+    client.post(
+        "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
+    )
+    # Old clients/assistant cannot accidentally combine all dates.
+    assert client.post("/api/orders", headers=_headers(), json=pickup).status_code == 409
+    stale = client.post(
+        "/api/orders",
+        headers=_headers(),
+        json={**pickup, "pickup_slot": "16-18", "group_id": groups[0]["id"]},
+    )
+    assert stale.status_code == 409
+    other = client.post(
+        "/api/orders", headers=_headers("other-token"), json={**pickup, "group_id": groups[0]["id"]}
+    )
+    assert other.status_code == 404
+    created = client.post(
+        "/api/orders", headers=_headers(), json={**pickup, "group_id": groups[0]["id"]}
+    )
+    assert created.status_code == 201
+    assert len(created.json()["items"]) == 1
+    assert created.json()["can_cancel"] is True
+    remaining = client.get("/api/cart", headers=_headers()).json()
+    assert remaining["total_quantity"] == 2
+    assert {item["group_id"] for item in remaining["items"]} == {None, groups[1]["id"]}
+
+
+def test_customer_cancellation_preserves_history_and_is_terminal(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, engine = client_and_engine
+    meal, location = _first_meal_and_location(engine)
+    client.post(
+        "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
+    )
+    order = client.post(
+        "/api/orders",
+        headers=_headers(),
+        json={"pickup_location_id": str(location.id), **_pickup(client)},
+    ).json()
+    assert (
+        client.post(
+            f"/api/orders/{order['id']}/cancel", headers=_headers("other-token")
+        ).status_code
+        == 404
+    )
+    cancelled = client.post(f"/api/orders/{order['id']}/cancel", headers=_headers())
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "cancelled"
+    assert cancelled.json()["can_cancel"] is False
+    assert cancelled.json()["items"] == order["items"]
+    assert client.post(f"/api/orders/{order['id']}/cancel", headers=_headers()).status_code == 409
+    assert client.get("/api/orders", headers=_headers()).json()[0]["status"] == "cancelled"
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(OrderItem)) == 1
+
+
+def test_customer_cannot_cancel_on_pickup_day(client_and_engine: tuple[TestClient, Engine]) -> None:
+    from datetime import UTC, datetime
+
+    client, engine = client_and_engine
+    meal, location = _first_meal_and_location(engine)
+    client.post(
+        "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
+    )
+    order = client.post(
+        "/api/orders",
+        headers=_headers(),
+        json={"pickup_location_id": str(location.id), **_pickup(client)},
+    ).json()
+    with Session(engine) as session:
+        saved = session.scalar(select(Order))
+        assert saved is not None
+        saved.pickup_start_at = datetime.now(UTC)
+        session.commit()
+    assert (
+        client.get(f"/api/orders/{order['id']}", headers=_headers()).json()["can_cancel"] is False
+    )
+    assert client.post(f"/api/orders/{order['id']}/cancel", headers=_headers()).status_code == 409
+
+
+@pytest.mark.parametrize(
+    "pickup_day,expected_deadline",
+    [
+        ("2026-03-29", "2026-03-28T23:00:00+00:00"),
+        ("2026-10-25", "2026-10-24T22:00:00+00:00"),
+        ("2026-10-26", "2026-10-25T23:00:00+00:00"),
+    ],
+)
+def test_cancellation_deadline_uses_oslo_calendar_midnight(
+    pickup_day: str, expected_deadline: str
+) -> None:
+    from datetime import date, datetime, time, timedelta
+    from zoneinfo import ZoneInfo
+
+    from prepwise_api.models import OrderStatus
+    from prepwise_api.services.orders import can_cancel_order, cancellation_deadline
+
+    order = Order(
+        status=OrderStatus.RECEIVED,
+        pickup_start_at=datetime.combine(
+            date.fromisoformat(pickup_day), time(16), ZoneInfo("Europe/Oslo")
+        ),
+    )
+    deadline = cancellation_deadline(order)
+    assert deadline == datetime.fromisoformat(expected_deadline)
+    assert can_cancel_order(order, now=deadline - timedelta(microseconds=1))
+    assert not can_cancel_order(order, now=deadline)
+    assert not can_cancel_order(order, now=deadline + timedelta(hours=1))
+
+
+def test_assistant_confirmation_cannot_ignore_new_pickup_groups(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    from datetime import date
+    from uuid import UUID
+
+    from prepwise_api.services import ApplicationConflictError
+    from prepwise_api.services.orders import confirm_user_order, prepare_user_order_confirmation
+
+    client, engine = client_and_engine
+    meal, location = _first_meal_and_location(engine)
+    pickup = _pickup(client)
+    cart = client.post(
+        "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
+    ).json()
+    with Session(engine) as session:
+        item = session.scalar(select(CartItem))
+        assert item is not None
+        user_id = item.user_id
+        prepared = prepare_user_order_confirmation(
+            session,
+            user_id,
+            location.id,
+            "prepare",
+            pickup_date=date.fromisoformat(pickup["pickup_date"]),
+            pickup_slot="16-18",
+        )
+    group_id = client.post("/api/cart/groups", headers=_headers(), json={}).json()["groups"][0][
+        "id"
+    ]
+    client.patch(
+        f"/api/cart/items/{cart['items'][0]['id']}",
+        headers=_headers(),
+        json={"quantity": 1, "group_id": group_id},
+    )
+    with Session(engine) as session:
+        with pytest.raises(ApplicationConflictError, match="separate pickup groups"):
+            confirm_user_order(
+                session,
+                user_id,
+                UUID(str(prepared["confirmation_token"])),
+                "confirm",
+                str(prepared["confirmation_phrase"]),
+            )
+        assert session.scalar(select(func.count()).select_from(Order)) == 0

@@ -12,6 +12,7 @@ export interface CartMeal {
 
 export interface CartItem {
   id: string
+  group_id?: string | null
   quantity: number
   line_total_nok: string
   meal: CartMeal
@@ -19,8 +20,34 @@ export interface CartItem {
 
 export interface Cart {
   items: CartItem[]
+  groups?: CartGroup[]
   total_quantity: number
   total_nok: string
+}
+
+export interface CartGroup {
+  id: string
+  pickup_location_id: string | null
+  pickup_date: string | null
+  pickup_slot: string | null
+  items: CartItem[]
+  total_quantity: number
+  total_nok: string
+}
+export interface GroupSelection {
+  pickup_location_id?: string | null
+  pickup_date?: string | null
+  pickup_slot?: string | null
+}
+export async function createCartGroup(token: string, language: Language): Promise<Cart> {
+  return cartRequest(`/api/cart/groups?lang=${language}`, token, { method: 'POST', body: '{}' })
+}
+export async function saveCartGroup(token: string, groupId: string, selection: GroupSelection, language: Language): Promise<Cart> {
+  return cartRequest(`/api/cart/groups/${groupId}?lang=${language}`, token, { method: 'PATCH', body: JSON.stringify(selection) })
+}
+export async function deleteCartGroup(token: string, groupId: string): Promise<void> {
+  const response = await fetch(apiUrl(`/api/cart/groups/${groupId}`), { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  if (!response.ok) throw await apiRequestError(response)
 }
 
 export async function fetchCart(
@@ -35,10 +62,11 @@ export async function addCartItem(
   accessToken: string,
   mealId: string,
   language: Language = 'no',
+  groupId?: string | null,
 ): Promise<Cart> {
   return cartRequest(`/api/cart/items?lang=${language}`, accessToken, {
     method: 'POST',
-    body: JSON.stringify({ meal_id: mealId, quantity: 1 }),
+    body: JSON.stringify({ meal_id: mealId, quantity: 1, ...(groupId !== undefined ? { group_id: groupId } : {}) }),
   })
 }
 
@@ -47,10 +75,11 @@ export async function updateCartItem(
   itemId: string,
   quantity: number,
   language: Language = 'no',
+  groupId?: string | null,
 ): Promise<Cart> {
   return cartRequest(`/api/cart/items/${itemId}?lang=${language}`, accessToken, {
     method: 'PATCH',
-    body: JSON.stringify({ quantity }),
+    body: JSON.stringify({ quantity, ...(groupId !== undefined ? { group_id: groupId } : {}) }),
   })
 }
 

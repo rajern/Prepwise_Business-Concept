@@ -1432,6 +1432,16 @@ h1 {
 }
 
 /* Customer navigation and overlays. */
+.pickup-group { margin-top: 1.2rem; border: 1px solid #d5ddd1; border-radius: .8rem; padding: 1rem; }
+.pickup-group h3 { margin-top: 0; }
+.pickup-group h4 { margin: 0; }
+.cart-item__group { grid-column: 1 / -1; }
+.upcoming-orders { margin: 1.5rem 0; }
+.upcoming-toggle { width: 100%; display: flex; justify-content: space-between; padding: 1rem; border: 1px solid #b8c7b5; border-radius: .7rem; background: #fff; color: #294c32; font-weight: 750; cursor: pointer; }
+.order-status--cancelled { background: #f7e6e1; color: #8a3021; }
+.cancel-order { margin-top: .7rem; border: 1px solid #a34732; background: #fff; color: #8a3021; padding: .7rem 1rem; border-radius: .5rem; cursor: pointer; }
+.meal-detail-dialog { width: min(56rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); margin: auto; overflow-y: auto; }
+.meal-detail-dialog::backdrop { background: #14251bcc; }
 .topbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: .7rem; flex-wrap: wrap; }
 .language-switch { display: flex; border: 1px solid #b8c7b5; border-radius: 999px; padding: .2rem; }
 .language-switch button { border: 0; border-radius: 999px; padding: .45rem .6rem; background: transparent; color: #294c32; cursor: pointer; font-size: .8rem; font-weight: 750; }

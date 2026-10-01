@@ -75,8 +75,12 @@ _TOOL_SPECS = (
     AssistantToolSpec(
         "search_meals",
         (
-            "READ: Search currently available Prepwise meals by text, minimum protein, "
-            "maximum calories and maximum price."
+            "READ: Search meals by text, recipe-verified diet_category (meat includes poultry; "
+            "fish is separate; vegetarian includes eggs/dairy), protein, calories and price. "
+            "Use diet_category, not literal diet keyword query, for broad dietary requests. "
+            "Null query/diet returns the small menu. Results include items, total_matches, "
+            "total_available, unknown_diet_count and next_offset. Follow pages before claiming "
+            "a complete list; unknown diets are not vegetarian guarantees."
         ),
         SearchMealsToolArguments,
         AssistantToolOperation.READ,
@@ -217,11 +221,22 @@ class AssistantToolRegistry:
                     min_protein_grams=_optional_decimal(search_arguments.min_protein_grams),
                     max_calories=search_arguments.max_calories,
                     max_price_nok=_optional_decimal(search_arguments.max_price_nok),
-                    limit=search_arguments.limit,
+                    diet_category=search_arguments.diet_category,
                 ),
                 lang=context.lang,
             )
-            return _model_list_json(meals)
+            catalogue = search_available_meals(context.session, lang=context.lang)
+            offset = search_arguments.offset
+            page = meals[offset : offset + search_arguments.limit]
+            next_offset = offset + len(page)
+            return {
+                "items": [meal.model_dump(mode="json", exclude={"image_url"}) for meal in page],
+                "total_matches": len(meals),
+                "total_available": len(catalogue),
+                "unknown_diet_count": sum(meal.diet_category is None for meal in catalogue),
+                "has_more": next_offset < len(meals),
+                "next_offset": next_offset if next_offset < len(meals) else None,
+            }
         if name == "get_meal_details":
             detail_arguments = GetMealDetailsToolArguments.model_validate(payload)
             return _model_json(

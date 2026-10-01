@@ -1,7 +1,7 @@
 from prepwise_api.models.assistant import OrderConfirmation
 from prepwise_api.models.assistant_usage import AssistantQuotaLock, AssistantUsageEvent
 from prepwise_api.models.base import Base
-from prepwise_api.models.cart import CartItem
+from prepwise_api.models.cart import CartGroup, CartItem
 from prepwise_api.models.catalog import (
     Allergen,
     Ingredient,
@@ -21,6 +21,7 @@ __all__ = [
     "AssistantUsageEvent",
     "Base",
     "CartItem",
+    "CartGroup",
     "Ingredient",
     "KnowledgeChunk",
     "Meal",

@@ -1,6 +1,6 @@
 import hashlib
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
@@ -8,10 +8,19 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
-from prepwise_api.models import CartItem, Meal, Order, OrderConfirmation, OrderItem, PickupLocation
+from prepwise_api.models import (
+    CartItem,
+    Meal,
+    Order,
+    OrderConfirmation,
+    OrderItem,
+    OrderStatus,
+    PickupLocation,
+)
 from prepwise_api.schemas import OrderDetailResponse, OrderItemResponse, OrderSummaryResponse
 from prepwise_api.schemas.pickup import PickupSlot
 from prepwise_api.services import ApplicationConflictError, ApplicationNotFoundError
+from prepwise_api.services.cart import lock_user_cart, owned_cart_group
 from prepwise_api.services.localization import Language, localized
 from prepwise_api.services.pickup_schedule import validate_pickup_selection
 
@@ -26,16 +35,29 @@ def create_user_order(
     *,
     pickup_date: date,
     pickup_slot: PickupSlot,
+    group_id: UUID | None = None,
     lang: Language = "no",
 ) -> OrderDetailResponse:
     """Create an order through the same validated transaction used by every caller."""
     try:
+        lock_user_cart(session, user_id)
+        if group_id is not None:
+            group = owned_cart_group(session, user_id, group_id)
+            if (group.pickup_location_id, group.pickup_date, group.pickup_slot) != (
+                pickup_location_id,
+                pickup_date,
+                pickup_slot,
+            ):
+                raise ApplicationConflictError(
+                    "Pickup group changed; review its location, date and time again"
+                )
         pickup_start_at, pickup_end_at = validate_pickup_selection(pickup_date, pickup_slot)
         location, cart_items, meals = _load_checkout_state(
             session,
             user_id,
             pickup_location_id,
             lock=True,
+            group_id=group_id,
         )
         order_id = _create_order_from_checkout_state(
             session,
@@ -65,6 +87,7 @@ def prepare_user_order_confirmation(
 ) -> dict[str, object]:
     """Create a short-lived token for a later, explicit user confirmation turn."""
     current_time = now or datetime.now(UTC)
+    lock_user_cart(session, user_id)
     pickup_start_at, pickup_end_at = validate_pickup_selection(
         pickup_date, pickup_slot, now=current_time
     )
@@ -193,6 +216,7 @@ def list_user_orders(session: Session, user_id: UUID) -> list[OrderSummaryRespon
         select(Order)
         .where(Order.user_id == user_id)
         .order_by(Order.created_at.desc(), Order.id.desc())
+        .execution_options(populate_existing=True)
     ).all()
     return [order_summary_response(order) for order in orders]
 
@@ -206,11 +230,54 @@ def get_user_order(
     return order_detail_response(order, lang=lang)
 
 
+def cancellation_deadline(order: Order) -> datetime:
+    pickup_day = _aware_utc(order.pickup_start_at).astimezone(OSLO_TIME_ZONE).date()
+    return datetime.combine(pickup_day, time.min, OSLO_TIME_ZONE).astimezone(UTC)
+
+
+def can_cancel_order(order: Order, *, now: datetime | None = None) -> bool:
+    return order.status not in {OrderStatus.CANCELLED, OrderStatus.COMPLETED} and _aware_utc(
+        now or datetime.now(UTC)
+    ) < cancellation_deadline(order)
+
+
+def cancel_user_order(
+    session: Session,
+    user_id: UUID,
+    order_id: UUID,
+    *,
+    lang: Language = "no",
+    now: datetime | None = None,
+) -> OrderDetailResponse:
+    """Keep historical items; serialize cancellation against fulfillment transitions."""
+    try:
+        order = session.scalar(
+            select(Order)
+            .where(Order.id == order_id, Order.user_id == user_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if order is None:
+            raise ApplicationNotFoundError("Order not found")
+        if not can_cancel_order(order, now=now):
+            raise ApplicationConflictError(
+                "Order cannot be cancelled on or after its pickup day "
+                "or after completion/cancellation"
+            )
+        order.status = OrderStatus.CANCELLED
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    return _load_created_order(session, order_id, user_id, lang=lang)
+
+
 def load_owned_order(session: Session, order_id: UUID, user_id: UUID) -> Order | None:
     return session.scalar(
         select(Order)
         .options(selectinload(Order.items))
         .where(Order.id == order_id, Order.user_id == user_id)
+        .execution_options(populate_existing=True)
     )
 
 
@@ -220,12 +287,31 @@ def _load_checkout_state(
     pickup_location_id: UUID,
     *,
     lock: bool,
+    group_id: UUID | None = None,
 ) -> tuple[PickupLocation, list[CartItem], dict[UUID, Meal]]:
-    location_query = select(PickupLocation).where(PickupLocation.id == pickup_location_id)
+    lock_user_cart(session, user_id)
+    if group_id is None:
+        grouped_item = session.scalar(
+            select(CartItem.id)
+            .where(CartItem.user_id == user_id, CartItem.group_id.is_not(None))
+            .limit(1)
+        )
+        if grouped_item is not None:
+            raise ApplicationConflictError(
+                "Cart has separate pickup groups; review and order each group in the cart UI"
+            )
+    else:
+        owned_cart_group(session, user_id, group_id)
+    location_query = (
+        select(PickupLocation)
+        .where(PickupLocation.id == pickup_location_id)
+        .execution_options(populate_existing=True)
+    )
     cart_query = (
         select(CartItem)
-        .where(CartItem.user_id == user_id)
+        .where(CartItem.user_id == user_id, CartItem.group_id == group_id)
         .order_by(CartItem.created_at, CartItem.id)
+        .execution_options(populate_existing=True)
     )
     if lock:
         location_query = location_query.with_for_update()
@@ -240,11 +326,13 @@ def _load_checkout_state(
         raise ApplicationConflictError("Cart is empty")
 
     meal_ids = [item.meal_id for item in cart_items]
-    meal_query = select(Meal).where(Meal.id.in_(meal_ids))
+    meal_query = select(Meal).where(Meal.id.in_(meal_ids)).execution_options(populate_existing=True)
     if lock:
         meal_query = meal_query.with_for_update()
     meals = {meal.id: meal for meal in session.scalars(meal_query)}
-    if len(meals) != len(meal_ids) or any(not meals[item.meal_id].available for item in cart_items):
+    if len(meals) != len(set(meal_ids)) or any(
+        not meals[item.meal_id].available for item in cart_items
+    ):
         raise ApplicationConflictError("Cart contains an unavailable meal")
     return location, cart_items, meals
 
@@ -296,6 +384,7 @@ def _cart_fingerprint(cart_items: list[CartItem], meals: dict[UUID, Meal]) -> st
     payload = [
         {
             "meal_id": str(item.meal_id),
+            "group_id": str(item.group_id) if item.group_id is not None else None,
             "quantity": item.quantity,
             "unit_price_nok": str(meals[item.meal_id].price_nok),
         }
@@ -324,6 +413,8 @@ def order_summary_response(order: Order) -> OrderSummaryResponse:
         pickup_end_at=_aware_utc(order.pickup_end_at),
         pickup_location_name=order.pickup_location_name,
         pickup_location_address=order.pickup_location_address,
+        cancellation_deadline=cancellation_deadline(order),
+        can_cancel=can_cancel_order(order),
     )
 
 

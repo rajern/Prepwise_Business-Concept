@@ -61,7 +61,12 @@ def update_admin_order_status(
     session: Annotated[Session, Depends(get_session)],
 ) -> AdminOrderDetailResponse:
     """Advance an order by exactly one step in the agreed lifecycle."""
-    order = session.scalar(select(Order).where(Order.id == order_id).with_for_update())
+    order = session.scalar(
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 

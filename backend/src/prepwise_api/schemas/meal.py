@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, field_validator
 
+from prepwise_api.catalog_diets import DietCategory
+
 
 class AllergenResponse(BaseModel):
     code: str
@@ -21,6 +23,7 @@ class MealResponse(BaseModel):
     fat_grams: Decimal
     ingredients: list[str]
     allergens: list[AllergenResponse]
+    diet_category: DietCategory | None = None
 
 
 class MealDetailResponse(MealResponse):

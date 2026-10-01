@@ -19,13 +19,16 @@ async function clearCustomerCart(request: APIRequestContext) {
   const headers = { Authorization: `Bearer ${customerToken}` }
   const response = await request.get('/api/cart?lang=no', { headers })
   expect(response.ok()).toBeTruthy()
-  const cart = (await response.json()) as { items: Array<{ id: string }> }
+  const cart = (await response.json()) as { items: Array<{ id: string }>; groups?: Array<{ id: string }> }
 
   for (const item of cart.items) {
     const deleteResponse = await request.delete(`/api/cart/items/${item.id}`, {
       headers,
     })
     expect(deleteResponse.ok()).toBeTruthy()
+  }
+  for (const group of cart.groups ?? []) {
+    expect((await request.delete(`/api/cart/groups/${group.id}`, { headers })).ok()).toBeTruthy()
   }
 }
 
@@ -118,6 +121,8 @@ test.describe.serial('critical customer and admin flows', () => {
     await expect(page.locator('.cart-badge')).toHaveText('0')
     const firstOrder = page.locator('.order-card').first()
     await expect(firstOrder).toBeVisible()
+    await firstOrder.getByRole('button', { name: 'Lukk bestilling' }).click()
+    await expect(page.locator('.order-detail')).toHaveCount(0)
     await firstOrder.getByRole('button', { name: 'Se bestilling' }).click()
     await expect(page.getByText('Ordredetaljer')).toBeVisible()
     await expect(page.locator('.order-detail')).toContainText('Mottatt')
@@ -153,6 +158,64 @@ test.describe.serial('critical customer and admin flows', () => {
       },
     )
     expect(response.status()).toBe(403)
+  })
+
+  test('pickup groups survive reload, checkout preserves another day, and cancellation moves the order to history', async ({ page }) => {
+    await clearCustomerCart(page.request)
+    await page.goto('/?__e2e_role=customer')
+    await expect(page.locator('.cart-badge')).toHaveText('0')
+    await page.getByRole('button', { name: 'Åpne handlekurv (0)', exact: true }).click()
+    await page.getByRole('button', { name: 'Legg til hentegruppe' }).click()
+    await expect(page.locator('.pickup-group')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Legg til hentegruppe' }).click()
+    await expect(page.locator('.pickup-group')).toHaveCount(2)
+    const groupResponse = await page.request.get('/api/cart', { headers: { Authorization: `Bearer ${customerToken}` } })
+    const groups = ((await groupResponse.json()) as { groups: Array<{ id: string }> }).groups
+    const pickup = (await (await page.request.get('/api/pickup-locations/options')).json()) as PickupOptions
+    for (const [position, group] of groups.entries()) {
+      const region = page.locator('.pickup-group').nth(position)
+      await region.getByLabel('Hentested', { exact: true }).selectOption({ index: 1 })
+      await expect(region.getByLabel('Hentedato', { exact: true })).toBeEnabled()
+      await region.getByLabel('Hentedato', { exact: true }).selectOption(pickup.days[position + 1].date)
+      await region.getByLabel('Hentetid', { exact: true }).selectOption('16-18')
+      await expect(page.getByRole('button', { name: 'Legg til hentegruppe' })).toBeEnabled()
+      expect(group.id).not.toBe('')
+    }
+    await page.getByRole('button', { name: 'Lukk handlekurv' }).click()
+    for (const group of groups) {
+      await page.getByLabel('Legg måltider i', { exact: true }).selectOption(group.id)
+      await page.locator('.meal-card').first().getByRole('button', { name: 'Legg i handlekurv' }).click()
+      await expect(page.locator('.meal-card').first().getByRole('button', { name: 'Legg i handlekurv' })).toBeEnabled()
+    }
+    await expect(page.locator('.cart-badge')).toHaveText('2')
+    await page.reload()
+    await page.getByRole('button', { name: 'Åpne handlekurv (2)', exact: true }).click()
+    const first = page.locator('.pickup-group').first()
+    const second = page.locator('.pickup-group').nth(1)
+    await expect(first.getByLabel('Hentedato', { exact: true })).toHaveValue(pickup.days[1].date)
+    await expect(second.getByLabel('Hentedato', { exact: true })).toHaveValue(pickup.days[2].date)
+    page.once('dialog', (dialog) => dialog.accept())
+    const placed = page.waitForResponse((response) => apiPath(response.url()) === '/api/orders' && response.request().method() === 'POST')
+    await first.getByRole('button', { name: 'Se over og bestill' }).click()
+    const newOrder = (await (await placed).json()) as { id: string }
+    await expect(page.locator('.cart-badge')).toHaveText('1')
+    await page.getByRole('button', { name: 'Åpne handlekurv (1)', exact: true }).click()
+    await expect(page.locator('.pickup-group').nth(1).getByLabel('Hentedato', { exact: true })).toHaveValue(pickup.days[2].date)
+    await expect(page.locator('.cart-item')).toHaveCount(1)
+    await page.getByRole('button', { name: 'Lukk handlekurv' }).click()
+    page.once('dialog', (dialog) => dialog.accept())
+    await page.getByRole('button', { name: 'Kanseller bestilling', exact: true }).click()
+    await expect(page.locator('.order-detail')).toHaveCount(0)
+    await expect(page.getByRole('link', { name: 'Ordrehistorikk' })).toHaveAttribute('href', '/orders')
+    await page.goto('/orders?__e2e_role=customer')
+    await expect(page.getByRole('heading', { name: 'Ordrehistorikk' })).toBeVisible()
+    const cancelledCard = page.locator(`.order-card[data-order-id="${newOrder.id}"]`)
+    await expect(cancelledCard).toContainText('Kansellert')
+    await cancelledCard.getByRole('button', { name: 'Se bestilling' }).click()
+    await expect(page.locator('.order-detail')).toContainText('Kansellert')
+    const detailResponse = await page.request.get(`/api/orders/${newOrder.id}`, { headers: { Authorization: `Bearer ${customerToken}` } })
+    expect((await detailResponse.json()).status).toBe('cancelled')
+    await clearCustomerCart(page.request)
   })
 
   test('chat mutation refreshes the cart without reloading the page', async ({ page }) => {

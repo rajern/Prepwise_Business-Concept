@@ -14,6 +14,7 @@ class OrderCreate(BaseModel):
     pickup_location_id: UUID
     pickup_date: date
     pickup_slot: PickupSlot
+    group_id: UUID | None = None
 
 
 class OrderSummaryResponse(BaseModel):
@@ -25,6 +26,8 @@ class OrderSummaryResponse(BaseModel):
     pickup_end_at: datetime
     pickup_location_name: str
     pickup_location_address: str
+    cancellation_deadline: datetime
+    can_cancel: bool
 
 
 class OrderItemResponse(BaseModel):

@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   addCartItem,
+  createCartGroup,
+  deleteCartGroup,
+  saveCartGroup,
+  type CartItem,
+  type GroupSelection,
   type Cart,
   fetchCart,
   removeCartItem,
@@ -20,6 +25,7 @@ import {
 } from './api/pickupLocations'
 import {
   createOrder,
+  cancelOrder,
   fetchOrder,
   fetchOrders,
   type OrderDetail,
@@ -33,6 +39,7 @@ import { fetchPickupOptions, type PickupOptions } from './api/pickupOptions'
 import { LanguageProvider, useLanguage, formatNok, formatPickup } from './i18n'
 import { CartDrawer } from './components/CartDrawer'
 import { MealArtwork } from './components/MealArtwork'
+import { GroupedCart, type CheckoutSelection } from './components/GroupedCart'
 
 type CatalogueFilter = 'all' | 'high-protein' | 'under-600'
 
@@ -63,6 +70,7 @@ function AppContent({
       ? `${message} ${language === 'no' ? 'Referanse' : 'Reference'}: ${reason.requestId}` : message
   }, [language, t])
   const isAdminRoute = window.location.pathname.startsWith('/admin')
+  const isHistoryRoute = window.location.pathname === '/orders'
   const [meals, setMeals] = useState<Meal[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [requestNumber, setRequestNumber] = useState(0)
@@ -76,20 +84,24 @@ function AppContent({
   const [cart, setCart] = useState<Cart | null>(null)
   const [cartError, setCartError] = useState<string | null>(null)
   const [cartMutationKey, setCartMutationKey] = useState<string | null>(null)
+  const cartVersion = useRef(0)
+  const cartWriteBusy = useRef(false)
   const [pickupLocations, setPickupLocations] = useState<PickupLocation[] | null>(
     null,
   )
-  const [selectedPickupId, setSelectedPickupId] = useState('')
   const [pickupOptions, setPickupOptions] = useState<PickupOptions | null>(null)
-  const [selectedPickupDate, setSelectedPickupDate] = useState('')
-  const [selectedPickupSlot, setSelectedPickupSlot] = useState('')
+  const [targetGroupId, setTargetGroupId] = useState('')
   const [cartOpen, setCartOpen] = useState(false)
   const [cartNotice, setCartNotice] = useState(false)
   const sessionRef = useRef({ token: accessToken, language })
   useEffect(() => { sessionRef.current = { token: accessToken, language } }, [accessToken, language])
   const [orders, setOrders] = useState<OrderSummary[] | null>(null)
+  const ordersVersion = useRef(0)
   const [ordersError, setOrdersError] = useState<string | null>(null)
   const [selectedOrder, setSelectedOrder] = useState<OrderDetail | null>(null)
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null)
+  const [upcomingOpen, setUpcomingOpen] = useState(false)
+  const [isCancelling, setIsCancelling] = useState(false)
   const [orderDetailError, setOrderDetailError] = useState<string | null>(null)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(
@@ -97,17 +109,23 @@ function AppContent({
   )
 
   const handleAccessTokenChange = useCallback((nextAccessToken: string | null) => {
+    cartVersion.current += 1
+    ordersVersion.current += 1
+    cartWriteBusy.current = false
+    sessionRef.current = { ...sessionRef.current, token: nextAccessToken }
     setAccessToken(nextAccessToken)
     setCart(null)
     setCartError(null)
     setPickupLocations(null)
-    setSelectedPickupId('')
-    setSelectedPickupDate('')
-    setSelectedPickupSlot('')
+    setTargetGroupId('')
     setOrders(null)
     setOrdersError(null)
     setSelectedOrder(null)
+    setSelectedOrderId(null)
     setOrderDetailError(null)
+    setCartMutationKey(null)
+    setIsCheckingOut(false)
+    setIsCancelling(false)
     if (!nextAccessToken) {
       setCartOpen(false)
       setCartNotice(false)
@@ -122,8 +140,9 @@ function AppContent({
     const controller = new AbortController()
 
     void fetchMeals(controller.signal, language)
-      .then(setMeals)
+      .then((value) => { if (!controller.signal.aborted) setMeals(value) })
       .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
         if (reason instanceof DOMException && reason.name === 'AbortError') {
           return
         }
@@ -141,8 +160,9 @@ function AppContent({
     const controller = new AbortController()
 
     void fetchMeal(selectedMealId, controller.signal, language)
-      .then(setMealDetail)
+      .then((value) => { if (!controller.signal.aborted) setMealDetail(value) })
       .catch((reason: unknown) => {
+        if (controller.signal.aborted) return
         if (reason instanceof DOMException && reason.name === 'AbortError') {
           return
         }
@@ -166,10 +186,12 @@ function AppContent({
 
     const controller = new AbortController()
 
+    const expectedCartVersion = cartVersion.current
+    const expectedOrdersVersion = ordersVersion.current
     void fetchCart(accessToken, controller.signal, language)
-      .then(setCart)
+      .then((value) => { if (!controller.signal.aborted && cartVersion.current === expectedCartVersion) setCart(value) })
       .catch((reason: unknown) => {
-        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setCartError(
             customerError(reason, t('We could not load your cart. Please try again.')),
           )
@@ -177,9 +199,9 @@ function AppContent({
       })
 
     void fetchPickupLocations(controller.signal)
-      .then(setPickupLocations)
+      .then((value) => { if (!controller.signal.aborted) setPickupLocations(value) })
       .catch((reason: unknown) => {
-        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setCartError(
             customerError(
               reason,
@@ -189,16 +211,16 @@ function AppContent({
         }
       })
 
-    void fetchPickupOptions(controller.signal).then(setPickupOptions).catch((reason: unknown) => {
-      if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+    void fetchPickupOptions(controller.signal).then((value) => { if (!controller.signal.aborted) setPickupOptions(value) }).catch((reason: unknown) => {
+      if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
         setCartError(t('We could not load the pickup times. Please try again.'))
       }
     })
 
     void fetchOrders(accessToken, controller.signal, language)
-      .then(setOrders)
+      .then((value) => { if (!controller.signal.aborted && ordersVersion.current === expectedOrdersVersion) setOrders(value) })
       .catch((reason: unknown) => {
-        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setOrdersError(
             customerError(
               reason,
@@ -211,14 +233,13 @@ function AppContent({
     return () => controller.abort()
   }, [accessToken, isAdminRoute, language, customerError, t])
 
-  const selectedOrderId = selectedOrder?.id
   useEffect(() => {
     if (!accessToken || !selectedOrderId) return
     const controller = new AbortController()
     void fetchOrder(accessToken, selectedOrderId, controller.signal, language)
-      .then(setSelectedOrder)
+      .then((value) => { if (!controller.signal.aborted) setSelectedOrder(value) })
       .catch((reason: unknown) => {
-        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setOrderDetailError(customerError(reason, 'We could not load that order. Please try again.'))
         }
       })
@@ -234,12 +255,14 @@ function AppContent({
   async function refreshCustomerState() {
     if (!accessToken) return
     const expected = { token: accessToken, language }
+    const expectedCartVersion = cartVersion.current
+    const expectedOrdersVersion = ordersVersion.current
     const results = await Promise.allSettled([
       fetchCart(accessToken, undefined, language), fetchOrders(accessToken, undefined, language),
     ])
     if (sessionRef.current.token !== expected.token || sessionRef.current.language !== expected.language) return
-    if (results[0].status === 'fulfilled') setCart(results[0].value)
-    if (results[1].status === 'fulfilled') setOrders(results[1].value)
+    if (results[0].status === 'fulfilled' && cartVersion.current === expectedCartVersion) setCart(results[0].value)
+    if (results[1].status === 'fulfilled' && ordersVersion.current === expectedOrdersVersion) setOrders(results[1].value)
     if (results.some((result) => result.status === 'rejected')) {
       setCartError(t('We could not refresh your cart and orders. Open the cart to try again.'))
     }
@@ -253,9 +276,6 @@ function AppContent({
       refreshCustomerState(),
       fetchPickupOptions().then((options) => {
         setPickupOptions(options)
-        if (!options.days.some((day) => day.date === selectedPickupDate)) {
-          setSelectedPickupDate(''); setSelectedPickupSlot('')
-        }
       }).catch(() => setCartError(t('We could not load the pickup times. Please try again.'))),
     ])
   }
@@ -295,6 +315,7 @@ function AppContent({
   }
 
   function openMealDetails(mealId: string) {
+    if (selectedMealId === mealId) { closeMealDetails(); return }
     setMealDetail(null)
     setDetailError(null)
     setSelectedMealId(mealId)
@@ -304,7 +325,8 @@ function AppContent({
     if (!accessToken) {
       return
     }
-    await runCartMutation(`meal-${mealId}`, () => addCartItem(accessToken, mealId, language), true)
+    const groupId = cart?.groups?.some((group) => group.id === targetGroupId) ? targetGroupId : null
+    await runCartMutation(`meal-${mealId}`, () => addCartItem(accessToken, mealId, language, groupId), true)
   }
 
   async function changeQuantity(itemId: string, quantity: number) {
@@ -320,18 +342,10 @@ function AppContent({
     if (!accessToken) {
       return
     }
-    setCartMutationKey(itemId)
-    setCartError(null)
-    try {
+    await runCartMutation(itemId, async () => {
       await removeCartItem(accessToken, itemId)
-      setCart(await fetchCart(accessToken, undefined, language))
-    } catch (reason: unknown) {
-      setCartError(
-        customerError(reason, t('We could not update your cart. Please try again.')),
-      )
-    } finally {
-      setCartMutationKey(null)
-    }
+      return fetchCart(accessToken, undefined, language)
+    })
   }
 
   async function runCartMutation(
@@ -339,12 +353,20 @@ function AppContent({
     mutation: () => Promise<Cart>,
     announce = false,
   ) {
+    if (cartWriteBusy.current) return
+    cartWriteBusy.current = true
+    cartVersion.current += 1
+    const expected = { token: accessToken, language }
+    const isCurrent = () => sessionRef.current.token === expected.token && sessionRef.current.language === expected.language
     setCartMutationKey(key)
     setCartError(null)
     try {
-      setCart(await mutation())
+      const next = await mutation()
+      if (!isCurrent()) return
+      setCart(next)
       if (announce) setCartNotice(true)
     } catch (reason: unknown) {
+      if (!isCurrent()) return
       setCartError(
         reason instanceof ApiRequestError && reason.status === 409
           ? t('That meal is no longer available.')
@@ -354,76 +376,117 @@ function AppContent({
             ),
       )
     } finally {
-      setCartMutationKey(null)
+      if (sessionRef.current.token === expected.token) { cartWriteBusy.current = false; setCartMutationKey(null) }
     }
   }
 
-  async function checkout() {
-    if (!accessToken || !cart || !selectedPickupId || !selectedPickupDate || !selectedPickupSlot) {
-      return
-    }
-    const location = pickupLocations?.find(
-      (candidate) => candidate.id === selectedPickupId,
-    )
-    if (!location) {
-      setCartError(t('Choose an active pickup location before checkout.'))
-      return
-    }
-    const confirmed = window.confirm(
-      language === 'no'
-        ? `Bestill for ${formatNok(cart.total_nok, language)} med henting på ${location.name}, ${selectedPickupDate} kl. ${selectedPickupSlot.replace('-', ':00–')}:00?`
-        : `Place this order for ${formatNok(cart.total_nok, language)} with pickup at ${location.name}, ${selectedPickupDate} ${selectedPickupSlot.replace('-', ':00–')}:00?`,
-    )
-    if (!confirmed) {
-      return
-    }
+  async function addPickupGroup() {
+    if (!accessToken) return
+    const known = new Set(cart?.groups?.map((group) => group.id))
+    await runCartMutation('group-create', async () => {
+      const next = await createCartGroup(accessToken, language)
+      const added = next.groups?.find((group) => !known.has(group.id))
+      if (sessionRef.current.token === accessToken && added) setTargetGroupId(added.id)
+      return next
+    })
+  }
 
+  async function savePickupGroup(id: string, fields: GroupSelection) {
+    if (!accessToken) return
+    await runCartMutation(`group-${id}`, () => saveCartGroup(accessToken, id, fields, language))
+  }
+
+  async function removePickupGroup(id: string) {
+    if (!accessToken) return
+    await runCartMutation(`group-${id}`, async () => {
+      await deleteCartGroup(accessToken, id)
+      if (sessionRef.current.token === accessToken && targetGroupId === id) setTargetGroupId('')
+      return fetchCart(accessToken, undefined, language)
+    })
+  }
+
+  async function moveItem(item: CartItem, groupId: string | null) {
+    if (!accessToken) return
+    await runCartMutation(item.id, () => updateCartItem(accessToken, item.id, item.quantity, language, groupId))
+  }
+
+  async function checkout(selection: CheckoutSelection) {
+    if (!accessToken || !cart || cartWriteBusy.current) return
+    const { location: locationId, date, slot } = selection
+    const location = pickupLocations?.find((candidate) => candidate.id === locationId)
+    const items = cart.items.filter((item) => (item.group_id ?? null) === selection.groupId)
+    if (!location || !items.length) return
+    const total = items.reduce((sum, item) => sum + Number(item.line_total_nok), 0)
+    if (!window.confirm(language === 'no'
+      ? `Bestill denne hentegruppen for ${formatNok(total, language)} med henting på ${location.name}, ${date} kl. ${slot.replace('-', ':00–')}:00?`
+      : `Place this pickup group order for ${formatNok(total, language)} with pickup at ${location.name}, ${date} ${slot.replace('-', ':00–')}:00?`)) return
+    const expected = { token: accessToken, language }
+    const isCurrent = () => sessionRef.current.token === expected.token && sessionRef.current.language === expected.language
     setIsCheckingOut(true)
+    ordersVersion.current += 1
+    cartWriteBusy.current = true
+    cartVersion.current += 1
     setCartError(null)
+    let committed = false
     try {
-      const order = await createOrder(accessToken, selectedPickupId, selectedPickupDate, selectedPickupSlot, language)
-      setCart({ items: [], total_quantity: 0, total_nok: '0.00' })
-      setSelectedPickupId('')
-      setSelectedPickupDate('')
-      setSelectedPickupSlot('')
+      let groupId = selection.groupId
+      // Legacy unassigned items are migrated to an explicit group when other groups exist.
+      if (!groupId && cart.groups?.some((group) => group.items.length > 0)) {
+        const created = await createCartGroup(accessToken, language)
+        const known = new Set(cart.groups.map((group) => group.id))
+        groupId = created.groups?.find((group) => !known.has(group.id))?.id ?? null
+        if (!groupId) throw new Error('Pickup group was not created')
+        for (const item of items) await updateCartItem(accessToken, item.id, item.quantity, language, groupId)
+      }
+      if (groupId) await saveCartGroup(accessToken, groupId, { pickup_location_id: locationId, pickup_date: date, pickup_slot: slot }, language)
+      const order = await createOrder(accessToken, locationId, date, slot, language, groupId)
+      committed = true
+      if (!isCurrent()) return
       setCartOpen(false)
+      setSelectedOrderId(order.id)
       setSelectedOrder(order)
+      setUpcomingOpen(true)
       setOrders((previous) => [order, ...(previous ?? []).filter((item) => item.id !== order.id)])
       setOrderDetailError(null)
-      // Order creation has already committed. A history refresh failure must not
-      // describe the checkout as failed or encourage duplicate ordering.
-      try {
-        setOrders(await fetchOrders(accessToken, undefined, language))
-        setOrdersError(null)
-      } catch (reason: unknown) {
-        setOrdersError(customerError(reason, 'Your order was placed, but order history could not be refreshed.'))
-      }
+      // Refresh errors must not imply a committed order failed or invite duplicate checkout.
+      await refreshCustomerState()
     } catch (reason: unknown) {
-      setCartError(
-        reason instanceof ApiRequestError && reason.status === 409
+      if (!isCurrent()) return
+      setCartError(committed
+        ? t('Your order was placed, but order history could not be refreshed.')
+        : reason instanceof ApiRequestError && reason.status === 409
           ? t('Check your cart and choose a valid pickup time.')
-          : customerError(
-              reason,
-              t('Checkout failed. Your cart has not been changed.'),
-            ),
-      )
+          : customerError(reason, 'We could not confirm checkout. Check your cart and upcoming orders before trying again.'))
+      if (!committed) await refreshCustomerState()
     } finally {
-      setIsCheckingOut(false)
+      if (sessionRef.current.token === expected.token) { cartWriteBusy.current = false; setIsCheckingOut(false) }
     }
   }
 
   async function openOrder(orderId: string) {
-    if (!accessToken) {
-      return
-    }
     setSelectedOrder(null)
     setOrderDetailError(null)
+    setSelectedOrderId((previous) => previous === orderId ? null : orderId)
+  }
+
+  async function cancelSelectedOrder() {
+    if (!accessToken || !selectedOrder?.can_cancel || isCancelling) return
+    const orderId = selectedOrder.id
+    if (!window.confirm(t('Cancel this order? This cannot be undone.'))) return
+    const expected = { token: accessToken, language }
+    setIsCancelling(true)
+    ordersVersion.current += 1
+    setOrderDetailError(null)
     try {
-      setSelectedOrder(await fetchOrder(accessToken, orderId, undefined, language))
+      const cancelled = await cancelOrder(accessToken, orderId, language)
+      if (sessionRef.current.token !== expected.token || sessionRef.current.language !== expected.language) return
+      setSelectedOrderId(null)
+      setSelectedOrder(null)
+      setOrders((previous) => previous?.map((order) => order.id === orderId ? cancelled : order) ?? [cancelled])
     } catch (reason: unknown) {
-      setOrderDetailError(
-        customerError(reason, t('We could not load that order. Please try again.')),
-      )
+      if (sessionRef.current.token === expected.token && sessionRef.current.language === expected.language) setOrderDetailError(customerError(reason, 'This order could not be cancelled. Refresh the orders and check the cancellation deadline.'))
+    } finally {
+      if (sessionRef.current.token === expected.token) setIsCancelling(false)
     }
   }
 
@@ -436,6 +499,7 @@ function AppContent({
           </a>
           <nav aria-label={t('Primary navigation')}>
             <a href="/">{t('Meals')}</a>
+            {!isAdminRoute && accessToken && <a href="/orders" aria-current={isHistoryRoute ? 'page' : undefined}>{t('Order history')}</a>}
             {currentUser?.role === 'admin' && <a href="/admin">Admin</a>}
           </nav>
         </div>
@@ -469,28 +533,26 @@ function AppContent({
       ) : (
         <>
       <section className="hero">
-        <p className="eyebrow">{t('Pickup meals in Oslo')}</p>
-        <h1>{t('Ready meals, without the guesswork.')}</h1>
-        <p className="summary">{t('Pick balanced meals with clear nutrition and collect them from a convenient location in Oslo.')}</p>
+        <p className="eyebrow">{t(isHistoryRoute ? 'Your account' : 'Pickup meals in Oslo')}</p>
+        <h1>{t(isHistoryRoute ? 'Your previous orders' : 'Ready meals, without the guesswork.')}</h1>
+        <p className="summary">{t(isHistoryRoute ? 'Completed and cancelled orders. Active orders are shown above the meal menu.' : 'Pick balanced meals with clear nutrition and collect them from a convenient location in Oslo.')}</p>
       </section>
 
       <AssistantPanel key={currentUser?.id ?? (accessToken ? 'signed-in' : 'signed-out')} accessToken={accessToken} userId={currentUser?.id ?? null} onStateChange={refreshCustomerState} />
 
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)}>
       {accessToken ? (
-        <CartPanel
+        <GroupedCart
+          key={currentUser?.id ?? accessToken}
           cart={cart}
           error={cartError}
-          mutationKey={cartMutationKey}
+          busy={Boolean(cartMutationKey) || isCheckingOut}
           pickupLocations={pickupLocations}
-          selectedPickupId={selectedPickupId}
           pickupOptions={pickupOptions}
-          selectedPickupDate={selectedPickupDate}
-          selectedPickupSlot={selectedPickupSlot}
-          isCheckingOut={isCheckingOut}
-          onPickupChange={setSelectedPickupId}
-          onDateChange={(date) => { setSelectedPickupDate(date); setSelectedPickupSlot('') }}
-          onSlotChange={setSelectedPickupSlot}
+          onCreateGroup={addPickupGroup}
+          onDeleteGroup={removePickupGroup}
+          onSaveGroup={savePickupGroup}
+          onMove={moveItem}
           onCheckout={checkout}
           onQuantityChange={changeQuantity}
           onRemove={removeItem}
@@ -498,16 +560,25 @@ function AppContent({
       ) : <div className="cart-panel"><h2 id="cart-heading">{t('Shopping cart')}</h2><p>{t('Sign in to use your cart.')}</p></div>}
       </CartDrawer>
 
-      {accessToken && ((orders?.length ?? 0) > 0 || ordersError || orderDetailError) && (
+      {isHistoryRoute && !accessToken && <p>{t('Sign in to view your orders.')}</p>}
+      {accessToken && isHistoryRoute && (
         <OrdersPanel
-          orders={orders}
+          orders={orders?.filter((order) => order.status === 'completed' || order.status === 'cancelled') ?? null}
           error={ordersError}
           selectedOrder={selectedOrder}
+          selectedOrderId={selectedOrderId}
           detailError={orderDetailError}
           onOpenOrder={openOrder}
+          onClose={() => { setSelectedOrderId(null); setSelectedOrder(null); setOrderDetailError(null) }}
+          onCancel={cancelSelectedOrder}
+          cancelling={isCancelling}
         />
       )}
-
+      {accessToken && !isHistoryRoute && <section className="upcoming-orders">
+        <button className="upcoming-toggle" type="button" aria-expanded={upcomingOpen} aria-controls="upcoming-orders-content" onClick={() => setUpcomingOpen((open) => !open)}>{t('Upcoming orders')} ({orders?.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length ?? 0}) <span aria-hidden="true">{upcomingOpen ? '−' : '+'}</span></button>
+        {upcomingOpen && <div id="upcoming-orders-content"><OrdersPanel title="Upcoming orders" orders={orders?.filter((order) => order.status !== 'completed' && order.status !== 'cancelled') ?? null} error={ordersError} selectedOrder={selectedOrder} selectedOrderId={selectedOrderId} detailError={orderDetailError} onOpenOrder={openOrder} onClose={() => { setSelectedOrderId(null); setSelectedOrder(null); setOrderDetailError(null) }} onCancel={cancelSelectedOrder} cancelling={isCancelling} /></div>}
+      </section>}
+      {!isHistoryRoute && <>
       <section className="catalogue" aria-labelledby="catalogue-heading">
         <div className="section-heading">
           <div>
@@ -525,6 +596,7 @@ function AppContent({
 
         {meals && meals.length > 0 && (
           <div className="catalogue-tools" aria-label={t('Filter meals')}>
+            {accessToken && (cart?.groups?.length ?? 0) > 0 && <label className="filter-field"><span>{t('Add meals to')}</span><select aria-label={t('Add meals to')} value={targetGroupId} onChange={(event) => setTargetGroupId(event.target.value)}><option value="">{t('Unassigned meals')}</option>{cart?.groups?.map((group, index) => <option key={group.id} value={group.id}>{t('Pickup group')} {index + 1}{group.pickup_date ? ` · ${group.pickup_date}` : ''}</option>)}</select></label>}
             <label className="filter-field filter-field--search">
               <span>{t('Search')}</span>
               <input
@@ -589,7 +661,7 @@ function AppContent({
                 key={meal.id}
                 meal={meal}
                 canAdd={Boolean(accessToken)}
-                isAdding={cartMutationKey === `meal-${meal.id}`}
+                isAdding={Boolean(cartMutationKey) || isCheckingOut}
                 onAdd={() => void addMeal(meal.id)}
                 onOpen={() => openMealDetails(meal.id)}
               />
@@ -597,6 +669,7 @@ function AppContent({
           </div>
         )}
       </section>
+      </>}
         </>
       )}
       <footer className="site-footer">
@@ -708,10 +781,18 @@ function MealDetailPanel({
   onClose,
 }: MealDetailPanelProps) {
   const { t, language } = useLanguage()
+  const dialog = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const element = dialog.current
+    if (!element) return
+    const previousFocus = document.activeElement as HTMLElement | null
+    element.showModal()
+    return () => { element.close(); previousFocus?.focus() }
+  }, [])
   return (
-    <section className="meal-detail" aria-labelledby="meal-detail-heading">
+    <dialog ref={dialog} className="meal-detail meal-detail-dialog" aria-labelledby="meal-detail-heading" onCancel={(event) => { event.preventDefault(); onClose() }} onClick={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <div className="meal-detail__header">
-        <p className="eyebrow">{t('Meal details')}</p>
+        <h2 className="eyebrow" id="meal-detail-heading">{t('Meal details')}</h2>
         <button className="close-button" type="button" onClick={onClose}>{t('Close')}</button>
       </div>
 
@@ -739,7 +820,7 @@ function MealDetailPanel({
               </span>
               <strong>{formatNok(detail.price_nok, language)}</strong>
             </div>
-            <h3 id="meal-detail-heading">{detail.name}</h3>
+            <h3>{detail.name}</h3>
             <p className="meal-detail__description">{detail.description}</p>
             <Nutrition meal={detail} />
             <div className="meal-detail__facts">
@@ -773,207 +854,35 @@ function MealDetailPanel({
           </div>
         </div>
       )}
-    </section>
+    </dialog>
   )
 }
 
-interface CartPanelProps {
-  cart: Cart | null
-  error: string | null
-  mutationKey: string | null
-  pickupLocations: PickupLocation[] | null
-  selectedPickupId: string
-  pickupOptions: PickupOptions | null
-  selectedPickupDate: string
-  selectedPickupSlot: string
-  onDateChange: (date: string) => void
-  onSlotChange: (slot: string) => void
-  isCheckingOut: boolean
-  onPickupChange: (locationId: string) => void
-  onCheckout: () => Promise<void>
-  onQuantityChange: (itemId: string, quantity: number) => Promise<void>
-  onRemove: (itemId: string) => Promise<void>
-}
-
-function CartPanel({
-  cart,
-  error,
-  mutationKey,
-  pickupLocations,
-  selectedPickupId,
-  pickupOptions,
-  selectedPickupDate,
-  selectedPickupSlot,
-  onDateChange,
-  onSlotChange,
-  isCheckingOut,
-  onPickupChange,
-  onCheckout,
-  onQuantityChange,
-  onRemove,
-}: CartPanelProps) {
-  const { t, language } = useLanguage()
-  return (
-    <section className="cart-panel" aria-labelledby="cart-heading">
-      <div className="cart-panel__heading">
-        <div>
-          <p className="eyebrow">{t('Your order')}</p>
-          <h2 id="cart-heading">{t('Shopping cart')}</h2>
-        </div>
-        {cart && (
-          <span className="cart-count">
-            {cart.total_quantity} {language === 'no' ? 'måltider' : cart.total_quantity === 1 ? 'meal' : 'meals'}
-          </span>
-        )}
-      </div>
-
-      {!cart && !error && (
-        <div className="cart-state" role="status">{t('Loading your cart…')}</div>
-      )}
-      {error && (
-        <div className="cart-state cart-state--error" role="alert">
-          {error}
-        </div>
-      )}
-      {cart && cart.items.length === 0 && (
-        <div className="cart-state">{t('Your cart is empty. Add a meal below.')}</div>
-      )}
-
-      {cart && cart.items.length > 0 && (
-        <div className="cart-layout">
-          <div className="cart-items">
-            {cart.items.map((item) => {
-              const isMutating = mutationKey === item.id
-              return (
-                <article className="cart-item" key={item.id}>
-                  <div>
-                    <h3>{item.meal.name}</h3>
-                    <p>
-                      {formatNok(item.meal.price_nok, language)} {t('each')}
-                      {!item.meal.available && (
-                        <span className="cart-item__unavailable">
-                          {' '}· {t('unavailable')}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <div className="quantity-control" aria-label={`${t('Quantity for')} ${item.meal.name}`}>
-                    <button
-                      type="button"
-                      disabled={isMutating || item.quantity <= 1}
-                      aria-label={`${t('Decrease')} ${item.meal.name}`}
-                      onClick={() =>
-                        void onQuantityChange(item.id, item.quantity - 1)
-                      }
-                    >
-                      −
-                    </button>
-                    <span>{item.quantity}</span>
-                    <button
-                      type="button"
-                      disabled={
-                        isMutating || !item.meal.available || item.quantity >= 99
-                      }
-                      aria-label={`${t('Increase')} ${item.meal.name}`}
-                      onClick={() =>
-                        void onQuantityChange(item.id, item.quantity + 1)
-                      }
-                    >
-                      +
-                    </button>
-                  </div>
-                  <strong>{formatNok(item.line_total_nok, language)}</strong>
-                  <button
-                    className="remove-button"
-                    type="button"
-                    disabled={isMutating}
-                    onClick={() => void onRemove(item.id)}
-                  >{t('Remove')}</button>
-                </article>
-              )
-            })}
-          </div>
-
-          <aside className="cart-summary">
-            <div className="cart-total">
-              <span>{t('Total')}</span>
-              <strong>{formatNok(cart.total_nok, language)}</strong>
-            </div>
-            <label className="pickup-field">
-              <span id="pickup-location-label">{t('Pickup location')}</span>
-              <select
-                aria-labelledby="pickup-location-label"
-                value={selectedPickupId}
-                disabled={!pickupLocations || pickupLocations.length === 0}
-                onChange={(event) => onPickupChange(event.target.value)}
-              >
-                <option value="">{t('Choose a pickup location')}</option>
-                {pickupLocations?.map((location) => (
-                  <option key={location.id} value={location.id}>
-                    {location.name} — {location.address_line}, {location.postal_code}{' '}
-                    {location.city}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="pickup-field">
-              <span id="pickup-date-label">{t('Pickup date')}</span>
-              <select aria-labelledby="pickup-date-label" value={selectedPickupDate} disabled={!pickupOptions} onChange={(event) => onDateChange(event.target.value)}>
-                <option value="">{t('Choose a pickup date')}</option>
-                {pickupOptions?.days.map((day) => <option key={day.date} value={day.date}>
-                  {new Intl.DateTimeFormat(language === 'no' ? 'nb-NO' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Oslo' }).format(new Date(`${day.date}T12:00:00Z`))}
-                </option>)}
-              </select>
-            </label>
-            <label className="pickup-field">
-              <span id="pickup-time-label">{t('Pickup time')}</span>
-              <select aria-labelledby="pickup-time-label" value={selectedPickupSlot} disabled={!selectedPickupDate} onChange={(event) => onSlotChange(event.target.value)}>
-                <option value="">{t('Choose a pickup time')}</option>
-                {pickupOptions?.days.find((day) => day.date === selectedPickupDate)?.slots.map((slot) => <option key={slot.id} value={slot.id}>
-                  {slot.id.replace('-', ':00–')}:00
-                </option>)}
-              </select>
-            </label>
-            <p className="checkout-note">{t('Pickup is available from tomorrow. All times are local to Oslo.')}</p>
-            <button
-              className="checkout-button"
-              type="button"
-              disabled={
-                !selectedPickupId ||
-                !selectedPickupDate ||
-                !selectedPickupSlot ||
-                isCheckingOut ||
-                Boolean(mutationKey) ||
-                cart.items.some((item) => !item.meal.available)
-              }
-              onClick={() => void onCheckout()}
-            >
-              {isCheckingOut ? t('Placing order…') : t('Review and place order')}
-            </button>
-            <p className="checkout-note">
-              {t('You will be asked to confirm before the order is created. No payment is required for this demo.')}
-            </p>
-          </aside>
-        </div>
-      )}
-    </section>
-  )
-}
 
 interface OrdersPanelProps {
+  title?: string
   orders: OrderSummary[] | null
   error: string | null
   selectedOrder: OrderDetail | null
+  selectedOrderId: string | null
   detailError: string | null
   onOpenOrder: (orderId: string) => Promise<void>
+  onClose: () => void
+  onCancel: () => Promise<void>
+  cancelling: boolean
 }
 
 function OrdersPanel({
+  title = 'Order history',
   orders,
   error,
   selectedOrder,
+  selectedOrderId,
   detailError,
   onOpenOrder,
+  onClose,
+  onCancel,
+  cancelling,
 }: OrdersPanelProps) {
   const { t, language } = useLanguage()
   return (
@@ -981,7 +890,7 @@ function OrdersPanel({
       <div className="orders-panel__heading">
         <div>
           <p className="eyebrow">{language === 'no' ? 'Din konto' : 'Your account'}</p>
-          <h2 id="orders-heading">{t('Order history')}</h2>
+          <h2 id="orders-heading">{t(title)}</h2>
         </div>
       </div>
 
@@ -1000,7 +909,7 @@ function OrdersPanel({
       {orders && orders.length > 0 && (
         <div className="order-list">
           {orders.map((order) => (
-            <article className="order-card" key={order.id}>
+            <article className="order-card" key={order.id} data-order-id={order.id}>
               <div>
                 <span className={`order-status order-status--${order.status}`}>
                   {t(formatOrderStatus(order.status))}
@@ -1009,7 +918,7 @@ function OrdersPanel({
                 <p>{formatPickup(order.pickup_start_at, order.pickup_end_at, language)}</p>
               </div>
               <strong>{formatNok(order.total_nok, language)}</strong>
-              <button type="button" onClick={() => void onOpenOrder(order.id)}>{t('View order')}</button>
+              <button type="button" aria-expanded={selectedOrderId === order.id} disabled={cancelling} onClick={() => void onOpenOrder(order.id)}>{selectedOrderId === order.id ? t('Close order') : t('View order')}</button>
             </article>
           ))}
         </div>
@@ -1020,9 +929,11 @@ function OrdersPanel({
           {detailError}
         </div>
       )}
+      {selectedOrderId && !selectedOrder && !detailError && <p role="status">{t('Loading order details…')}</p>}
       {selectedOrder && (
         <article className="order-detail" aria-labelledby="order-detail-heading">
           <div className="order-detail__heading">
+            <button className="close-button" type="button" onClick={onClose}>{t('Close order')}</button>
             <div>
               <p className="eyebrow">{t('Order details')}</p>
               <h3 id="order-detail-heading">
@@ -1053,6 +964,10 @@ function OrdersPanel({
             <span>{t('Total')}</span>
             <strong>{formatNok(selectedOrder.total_nok, language)}</strong>
           </div>
+          {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && <>
+            <p className="checkout-note">{t('To change pickup after ordering, cancel and place a new order. Cancellation is only possible before the pickup day (Oslo time).')}</p>
+            {selectedOrder.can_cancel && <button type="button" className="cancel-order" disabled={cancelling} onClick={() => void onCancel()}>{cancelling ? t('Cancelling…') : t('Cancel order')}</button>}
+          </>}
         </article>
       )}
     </section>

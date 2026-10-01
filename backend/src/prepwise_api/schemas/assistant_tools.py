@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
+from prepwise_api.catalog_diets import DietCategory
+
 
 class AssistantToolArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -18,7 +20,9 @@ class SearchMealsToolArguments(AssistantToolArguments):
     min_protein_grams: float | None = Field(default=None, ge=0, le=5000)
     max_calories: int | None = Field(default=None, ge=0, le=10000)
     max_price_nok: float | None = Field(default=None, ge=0, le=10000)
-    limit: int = Field(default=10, ge=1, le=20)
+    limit: int = Field(default=20, ge=1, le=20)
+    offset: int = Field(default=0, ge=0, le=100000)
+    diet_category: DietCategory | None = None
 
     @field_validator("query")
     @classmethod

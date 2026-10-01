@@ -126,6 +126,11 @@ def test_search_meals_applies_nutrition_text_and_result_limit(engine: Engine) ->
 
     assert result["ok"] is True
     data = result["data"]
+    assert isinstance(data, dict)
+    assert data["total_matches"] == 3
+    assert data["has_more"] is True
+    assert data["next_offset"] == 2
+    data = data["items"]
     assert isinstance(data, list)
     assert 0 < len(data) <= 2
     assert all(isinstance(meal, dict) for meal in data)
@@ -135,6 +140,36 @@ def test_search_meals_applies_nutrition_text_and_result_limit(engine: Engine) ->
         "kylling" in " ".join([meal["name"], meal["description"], *meal["ingredients"]]).casefold()
         for meal in data
     )
+
+
+def test_small_catalogue_is_complete_and_large_pages_are_explicit(engine: Engine) -> None:
+    registry = AssistantToolRegistry()
+    with Session(engine) as session:
+        context = AssistantToolContext(session=session, user=_user(session, "tool-user-a"))
+        full = _result_payload(registry.execute_json("search_meals", {}, context))["data"]
+        assert isinstance(full, dict)
+        assert full["total_available"] == full["total_matches"] == 12
+        assert len(full["items"]) == 12
+        assert full["has_more"] is False
+        pages = [
+            _result_payload(
+                registry.execute_json("search_meals", {"limit": 5, "offset": offset}, context)
+            )["data"]
+            for offset in (0, 5, 10)
+        ]
+        assert all(isinstance(page, dict) and page["total_matches"] == 12 for page in pages)
+        identifiers = []
+        for page in pages:
+            assert isinstance(page, dict)
+            for item in page["items"]:
+                identifiers.append(item["id"])
+        assert len(set(identifiers)) == len(identifiers) == 12
+        meat = _result_payload(
+            registry.execute_json("search_meals", {"diet_category": "meat"}, context)
+        )["data"]
+        assert isinstance(meat, dict)
+        assert meat["total_matches"] == 6
+        assert all(item["diet_category"] == "meat" for item in meat["items"])
 
 
 def test_cart_tools_preserve_authenticated_user_scope(engine: Engine) -> None:

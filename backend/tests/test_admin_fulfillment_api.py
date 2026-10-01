@@ -240,3 +240,22 @@ def test_admin_can_inspect_orders_and_only_advance_valid_statuses(
         json={"status": "completed"},
     )
     assert completed_again.status_code == 409
+
+
+def test_admin_cannot_reopen_customer_cancelled_order(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, engine = client_and_engine
+    _provision_user(client)
+    created = _create_customer_order(client, engine)
+    order_id = created["id"]
+    assert client.post(f"/api/orders/{order_id}/cancel", headers=_headers()).status_code == 200
+    _promote_admin(engine)
+    response = client.patch(
+        f"/api/admin/orders/{order_id}/status", headers=_headers(), json={"status": "preparing"}
+    )
+    assert response.status_code == 409
+    assert (
+        client.get(f"/api/admin/orders/{order_id}", headers=_headers()).json()["status"]
+        == "cancelled"
+    )

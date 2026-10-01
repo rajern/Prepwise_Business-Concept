@@ -68,6 +68,19 @@ Ingredients and allergens should be modelled relationally rather than stored onl
 
 The shopping cart is persistent.
 
+Cart items may belong to an owned persistent pickup group, or the legacy unassigned group.
+Each named group stores its own location/date/slot. Checkout locks the user's cart, creates
+one order for the selected group and consumes only that group's items. Named selections must
+match the reviewed checkout; legacy assistant checkout rejects a multi-group cart rather than
+choosing a group. Transaction advisory locks serialize user cart changes without granting
+runtime UPDATE access to users. Empty groups can be explicitly removed only after moving items.
+
+Customers can cancel through a confirmed website button before midnight at the beginning of
+the pickup day in Europe/Oslo. Backend time/ownership checks and row locks enforce this deadline
+and serialize against fulfillment. Cancelled/completed orders are terminal history; other
+statuses stay upcoming even if overdue. Pickup changes after ordering require cancellation and
+a new order. The demo has no payment/refund workflow.
+
 Order creation must be transactional, and order items must preserve relevant historical values such as the price at purchase time.
 
 Catalogue translations are authored database fields, not model-generated responses. Orders
@@ -310,6 +323,21 @@ PostgreSQL with `pgvector` is the preferred first option if vector search is req
 ### Agent workflow
 
 The system uses one agent capable of multi-step reasoning and tool use.
+
+The selected model/low reasoning setting is unchanged. Small-catalogue search defaults to
+twenty results (all twelve current meals), with explicit match/availability counts and next-page
+metadata. Recipe-guarded authored categories distinguish meat (including poultry), fish and
+vegetarian (including dairy/eggs); changed or unknown recipes remain unclassified. This is
+declared-recipe metadata, not an allergen/medical guarantee. The LLM can retrieve broad data
+and reason over preferences/constraints rather than treating dietary labels as literal words.
+
+Successful cart mutation services commit and perform a fresh authoritative cart read. The agent
+validates/reuses that read instead of spending a model turn selecting a redundant verification
+tool; failed mutations still require an independently executed read. Tool/write/token limits
+are unchanged. Authenticated SSE uses the same admission gate as JSON. Model text is displayed
+as an unconfirmed draft, cleared on tool continuation/error, and stored as history only after
+final workflow validation. Disconnect cancels the producer; bounded backpressure, transaction
+cleanup and exactly-once lease release prevent a stalled socket retaining AI work indefinitely.
 
 Example flow:
 

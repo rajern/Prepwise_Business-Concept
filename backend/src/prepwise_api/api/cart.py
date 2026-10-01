@@ -13,12 +13,15 @@ from prepwise_api.schemas import (
     CartItemQuantityUpdate,
     CartResponse,
 )
+from prepwise_api.schemas.cart import CartGroupWrite
 from prepwise_api.services import ApplicationServiceError
 from prepwise_api.services.cart import (
     add_user_cart_item,
     get_user_cart,
+    remove_user_cart_group,
     remove_user_cart_item,
     set_user_cart_item_quantity,
+    write_user_cart_group,
 )
 from prepwise_api.services.localization import Language
 
@@ -44,7 +47,14 @@ def add_cart_item(
 ) -> CartResponse:
     """Add an available meal, or increment its existing cart quantity."""
     try:
-        return add_user_cart_item(session, user.id, payload.meal_id, payload.quantity, lang=lang)
+        return add_user_cart_item(
+            session,
+            user.id,
+            payload.meal_id,
+            payload.quantity,
+            group_id=payload.group_id,
+            lang=lang,
+        )
     except ApplicationServiceError as error:
         raise_service_http_error(error)
 
@@ -59,7 +69,55 @@ def change_cart_item_quantity(
 ) -> CartResponse:
     """Set a cart quantity while enforcing ownership and availability."""
     try:
-        return set_user_cart_item_quantity(session, user.id, item_id, payload.quantity, lang=lang)
+        return set_user_cart_item_quantity(
+            session,
+            user.id,
+            item_id,
+            payload.quantity,
+            group_id=payload.group_id,
+            move_group="group_id" in payload.model_fields_set,
+            lang=lang,
+        )
+    except ApplicationServiceError as error:
+        raise_service_http_error(error)
+
+
+@router.post("/groups", response_model=CartResponse, status_code=status.HTTP_201_CREATED)
+def create_cart_group(
+    payload: CartGroupWrite,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
+) -> CartResponse:
+    try:
+        return write_user_cart_group(session, user.id, payload, lang=lang)
+    except ApplicationServiceError as error:
+        raise_service_http_error(error)
+
+
+@router.patch("/groups/{group_id}", response_model=CartResponse)
+def update_cart_group(
+    group_id: UUID,
+    payload: CartGroupWrite,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+    lang: Language = "no",
+) -> CartResponse:
+    try:
+        return write_user_cart_group(session, user.id, payload, group_id=group_id, lang=lang)
+    except ApplicationServiceError as error:
+        raise_service_http_error(error)
+
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_cart_group(
+    group_id: UUID,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+) -> Response:
+    try:
+        remove_user_cart_group(session, user.id, group_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
     except ApplicationServiceError as error:
         raise_service_http_error(error)
 

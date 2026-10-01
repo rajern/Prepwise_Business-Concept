@@ -60,7 +60,7 @@ class AssistantWorkflowState:
             self.expected_failure_count += 1
             self._failed_calls.add(_call_fingerprint(name, arguments))
 
-        if name in _CART_WRITE_TOOLS:
+        if executed and name in _CART_WRITE_TOOLS:
             self.cart_verification_required = True
         elif name == _CART_VERIFICATION_TOOL and succeeded:
             self.cart_verification_required = False

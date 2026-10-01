@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from prepwise_api.catalog_diets import DietCategory, catalogue_diet_category
 from prepwise_api.meal_images import catalogue_image_url
 from prepwise_api.models import Ingredient, Meal
 from prepwise_api.schemas import AllergenResponse, MealDetailResponse, MealResponse
@@ -29,6 +30,8 @@ class MealSearchFilters:
     max_calories: int | None = None
     max_price_nok: Decimal | None = None
     limit: int | None = None
+    offset: int = 0
+    diet_category: DietCategory | None = None
 
 
 def search_available_meals(
@@ -44,6 +47,7 @@ def search_available_meals(
         .where(Meal.available.is_(True))
         .options(selectinload(Meal.ingredients), selectinload(Meal.allergens))
         .order_by(Meal.name)
+        .execution_options(populate_existing=True)
     )
     if active_filters.query:
         escaped_query = _escape_like(active_filters.query)
@@ -75,9 +79,6 @@ def search_available_meals(
         statement = statement.where(Meal.calories <= active_filters.max_calories)
     if active_filters.max_price_nok is not None:
         statement = statement.where(Meal.price_nok <= active_filters.max_price_nok)
-    if active_filters.limit is not None:
-        statement = statement.limit(active_filters.limit)
-
     matched_meals = list(session.scalars(statement).unique().all())
     if active_filters.query:
         phrase = active_filters.query.casefold()
@@ -94,10 +95,25 @@ def search_available_meals(
                 )
             )
         ]
-        if exact_matches:
-            matched_meals = exact_matches
+        # Only an actual complete meal name justifies narrowing broad ingredient
+        # matches. A word like "kjøtt" must not hide ingredient-only matches.
+        named_matches = [
+            meal
+            for meal in exact_matches
+            if phrase in {meal.name.casefold(), (meal.name_en or "").casefold()}
+        ]
+        if named_matches:
+            matched_meals = named_matches
+    if active_filters.diet_category is not None:
+        matched_meals = [
+            meal
+            for meal in matched_meals
+            if catalogue_diet_category(meal) == active_filters.diet_category
+        ]
     responses = [meal_response(meal, lang=lang) for meal in matched_meals]
-    return sorted(responses, key=lambda meal: meal.name)
+    ordered = sorted(responses, key=lambda meal: meal.name)
+    end = None if active_filters.limit is None else active_filters.offset + active_filters.limit
+    return ordered[active_filters.offset : end]
 
 
 def get_meal_details(
@@ -108,6 +124,7 @@ def get_meal_details(
         select(Meal)
         .where(Meal.id == meal_id)
         .options(selectinload(Meal.ingredients), selectinload(Meal.allergens))
+        .execution_options(populate_existing=True)
     )
     if meal is None:
         raise ApplicationNotFoundError("Meal not found")
@@ -136,6 +153,7 @@ def meal_response(
             )
             for allergen in sorted(meal.allergens, key=lambda item: item.name)
         ],
+        diet_category=catalogue_diet_category(meal),
     )
 
 

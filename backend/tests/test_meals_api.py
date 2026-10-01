@@ -120,6 +120,50 @@ def test_catalog_search_matches_distinctive_terms_in_a_translated_meal_name(
     assert [meal.name for meal in meals] == ["Tofu satay med risnudler"]
 
 
+def test_broad_meat_word_preserves_ingredient_only_matches(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    _, engine = client_and_engine
+    with Session(engine) as session:
+        meals = search_available_meals(session, MealSearchFilters(query="kjøtt"))
+    assert {meal.name for meal in meals} == {
+        "Kalkunkjøttboller med couscous",
+        "Biff stroganoff med potetmos",
+    }
+
+
+def test_diet_category_returns_all_declared_meat_and_vegetarian_recipes(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    _, engine = client_and_engine
+    with Session(engine) as session:
+        meat = search_available_meals(session, MealSearchFilters(diet_category="meat"))
+        vegetarian = search_available_meals(
+            session,
+            MealSearchFilters(diet_category="vegetarian"),
+        )
+    assert len(meat) == 6
+    assert {meal.name for meal in vegetarian} == {
+        "Tofu satay med risnudler",
+        "Linsegryte med søtpotet",
+        "Falafelbowl med bulgur",
+    }
+    assert all(meal.diet_category == "meat" for meal in meat)
+
+
+def test_recipe_edit_invalidates_diet_category_instead_of_guessing(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, engine = client_and_engine
+    with Session(engine) as session:
+        meal = session.scalar(select(Meal).where(Meal.name == "Tofu satay med risnudler"))
+        assert meal is not None
+        meal.ingredients.pop()
+        session.commit()
+        meal_id = meal.id
+    assert client.get(f"/api/meals/{meal_id}").json()["diet_category"] is None
+
+
 def test_english_catalogue_localizes_names_ingredients_and_allergens(
     client_and_engine: tuple[TestClient, Engine],
 ) -> None:

@@ -9,6 +9,7 @@ EXPECTED_TABLES = {
     "assistant_quota_lock",
     "assistant_usage_events",
     "cart_items",
+    "cart_groups",
     "ingredients",
     "knowledge_chunks",
     "meal_allergens",

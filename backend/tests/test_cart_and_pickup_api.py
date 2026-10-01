@@ -113,6 +113,7 @@ def test_cart_crud_persists_and_calculates_authoritative_totals(
         "items": [],
         "total_quantity": 0,
         "total_nok": "0.00",
+        "groups": [],
     }
 
 
@@ -182,3 +183,130 @@ def test_pickup_locations_only_expose_active_database_rows(
     assert inactive_response.status_code == 404
     assert inactive_response.json()["detail"] == "Pickup location not found or inactive"
     assert inactive_response.json()["code"] == "not_found"
+
+
+def test_groups_persist_pickup_and_isolate_duplicate_meals(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, _ = client_and_engine
+    headers = {"Authorization": "Bearer valid-token"}
+    meal = client.get("/api/meals").json()[0]
+    location = client.get("/api/pickup-locations").json()[0]
+    days = client.get("/api/pickup-locations/options").json()["days"]
+    group_ids = []
+    for day in days[:2]:
+        created = client.post(
+            "/api/cart/groups",
+            headers=headers,
+            json={
+                "pickup_location_id": location["id"],
+                "pickup_date": day["date"],
+                "pickup_slot": "16-18",
+            },
+        )
+        assert created.status_code == 201
+        group_id = next(
+            group["id"] for group in created.json()["groups"] if group["id"] not in group_ids
+        )
+        group_ids.append(group_id)
+        added = client.post(
+            "/api/cart/items",
+            headers=headers,
+            json={"meal_id": meal["id"], "quantity": 2, "group_id": group_id},
+        )
+        assert added.status_code == 201
+    cart = client.get("/api/cart", headers=headers).json()
+    assert cart["total_quantity"] == 4
+    assert len(cart["items"]) == 2
+    assert {item["group_id"] for item in cart["items"]} == set(group_ids)
+    assert {group["pickup_date"] for group in cart["groups"]} == {day["date"] for day in days[:2]}
+    assert client.delete(f"/api/cart/groups/{group_ids[0]}", headers=headers).status_code == 409
+    item = next(item for item in cart["items"] if item["group_id"] == group_ids[0])
+    moved = client.patch(
+        f"/api/cart/items/{item['id']}",
+        headers=headers,
+        json={"quantity": 2, "group_id": group_ids[1]},
+    )
+    assert moved.status_code == 200
+    assert len(moved.json()["items"]) == 1
+    assert moved.json()["items"][0]["quantity"] == 4
+    assert client.delete(f"/api/cart/groups/{group_ids[0]}", headers=headers).status_code == 204
+    item = moved.json()["items"][0]
+    # Omitted group_id retains assignment; explicit null removes assignment.
+    retained = client.patch(
+        f"/api/cart/items/{item['id']}", headers=headers, json={"quantity": 3}
+    ).json()
+    assert retained["items"][0]["group_id"] == group_ids[1]
+    unassigned = client.patch(
+        f"/api/cart/items/{item['id']}", headers=headers, json={"quantity": 3, "group_id": None}
+    ).json()
+    assert unassigned["items"][0]["group_id"] is None
+
+
+def test_group_ownership_and_invalid_selection(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, _ = client_and_engine
+    headers = {"Authorization": "Bearer valid-token"}
+    other = {"Authorization": "Bearer other-token"}
+    group_id = client.post("/api/cart/groups", headers=headers, json={}).json()["groups"][0]["id"]
+    meal = client.get("/api/meals").json()[0]
+    assert client.patch(f"/api/cart/groups/{group_id}", headers=other, json={}).status_code == 404
+    assert client.delete(f"/api/cart/groups/{group_id}", headers=other).status_code == 404
+    assert (
+        client.post(
+            "/api/cart/items",
+            headers=other,
+            json={"meal_id": meal["id"], "quantity": 1, "group_id": group_id},
+        ).status_code
+        == 404
+    )
+    assert (
+        client.patch(
+            f"/api/cart/groups/{group_id}",
+            headers=headers,
+            json={"pickup_date": "2020-01-01", "pickup_slot": "16-18"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.patch(
+            f"/api/cart/groups/{group_id}", headers=headers, json={"pickup_date": "2020-01-01"}
+        ).status_code
+        == 422
+    )
+    assert (
+        client.patch(
+            f"/api/cart/groups/{group_id}",
+            headers=headers,
+            json={"pickup_location_id": "00000000-0000-0000-0000-000000000000"},
+        ).status_code
+        == 409
+    )
+
+
+def test_group_move_quantity_overflow_preserves_both_lines(
+    client_and_engine: tuple[TestClient, Engine],
+) -> None:
+    client, _ = client_and_engine
+    headers = {"Authorization": "Bearer valid-token"}
+    meal = client.get("/api/meals").json()[0]
+    group_id = client.post("/api/cart/groups", headers=headers, json={}).json()["groups"][0]["id"]
+    client.post(
+        "/api/cart/items",
+        headers=headers,
+        json={"meal_id": meal["id"], "quantity": 99, "group_id": group_id},
+    )
+    cart = client.post(
+        "/api/cart/items", headers=headers, json={"meal_id": meal["id"], "quantity": 1}
+    ).json()
+    item = next(item for item in cart["items"] if item["group_id"] is None)
+    assert (
+        client.patch(
+            f"/api/cart/items/{item['id']}",
+            headers=headers,
+            json={"quantity": 1, "group_id": group_id},
+        ).status_code
+        == 422
+    )
+    assert client.get("/api/cart", headers=headers).json()["total_quantity"] == 100

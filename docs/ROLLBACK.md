@@ -25,7 +25,9 @@ Delivery uses two contiguous commits, pushed together after validation:
    assistant endpoint. Frontend accepts JSON even when requesting SSE. Validated171 backend
    tests,54 frontend tests,9 migrated-PG browser scenarios and Docker build; a synthetic image
    drill proved scoped group checkout, other-group retention, cancelled-history decoding and
-   authenticated JSON fallback without any provider calls. Exact SHA is recorded at delivery.
+   authenticated JSON fallback without any provider calls. Exact recovery SHA:
+   `ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55`. Local tested image manifest:
+   `sha256:bdab3651d4ac4fb035f37d3ad0fa7751088131eeb6f35758abbde9e9afdea2fc`.
 2. **SSE delivery commit:** only the assistant HTTP endpoint,6 streaming regressions and release
    evidence. Schema/grants/KB/domain/frontend/seed/dependencies are identical to point1.
 
@@ -38,6 +40,14 @@ not a previously serving production artifact; this is NOT a completed production
 or an automatic controller. Domain/feature defects are outside this narrow recovery and require
 a reviewed compatible forward repair. Mixed/failed migration/index/deploy remains a stop and
 inspect condition, not permission for blind revert. Stop after one failed recovery attempt.
+
+Recovery source comparison must satisfy
+`git diff ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55 <revert-SHA>` with no changes outside
+the streaming regression test and release evidence after the endpoint revert. In particular
+the domain/model/migration/runtime-grant/frontend/knowledge source must be byte-identical.
+The disposable drill proved the recovery artifact works after groups/cancelled rows exist;
+it did not exercise GitHub/Azure rollback or production writes. Rebuilt artifacts may differ
+in transitive dependencies; required CI and serving-image verification remain mandatory.
 
 The single-code-only-commit/no-op procedure below remains applicable to later eligible releases.
 For this two-commit feature release only commit2 is the eligible candidate and point1 its base;

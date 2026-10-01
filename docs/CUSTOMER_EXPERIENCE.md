@@ -69,6 +69,10 @@ fresh gates, preserves the migration/business state and does not re-index change
 This is not a production rollback drill, nor a way to undo all features; domain defects require
 a compatible forward repair. See `ROLLBACK.md`; never downgrade/delete business data.
 
+Validated compatible recovery commit: `ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55`.
+The following delivery commit changes only the SSE route/regressions and release evidence;
+all migration, persisted-domain, runtime-grant, frontend and knowledge files remain identical.
+
 New policy documents intentionally change KB12->14 chunks; the existing deployment indexer may
 now synchronize changed chunks under the owner's explicit embedding approval. Conversational
 model evaluation/image generation remains unapproved; no such paid calls were made.

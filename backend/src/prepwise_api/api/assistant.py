@@ -1,13 +1,18 @@
+import asyncio
+import json
+from collections.abc import AsyncIterator
+from contextlib import suppress
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from prepwise_api.assistant import (
     AssistantConfigurationError,
     AssistantResponder,
+    AssistantService,
     AssistantTimeoutError,
     AssistantUnavailableError,
     get_assistant_service,
@@ -35,7 +40,7 @@ async def create_assistant_message(
     session: Annotated[Session, Depends(get_session)],
     assistant: Annotated[AssistantResponder, Depends(get_assistant_service)],
     settings: Annotated[Settings, Depends(get_settings)],
-) -> AssistantMessageResponse | JSONResponse:
+) -> AssistantMessageResponse | JSONResponse | StreamingResponse:
     """Send one authenticated customer message to the configured model."""
     request_id = str(request.state.request_id)
     if not settings.assistant_enabled:
@@ -54,18 +59,101 @@ async def create_assistant_message(
         )
     except (SQLAlchemyError, RuntimeError) as error:
         raise HTTPException(status_code=503, detail=_detail(payload.lang, "unavailable")) from error
+    context = AssistantToolContext(
+        session=session,
+        user=user,
+        request_id=request_id,
+        message=payload.message,
+        lang=payload.lang,
+        history=tuple(payload.history),
+    )
+    if "text/event-stream" in request.headers.get("accept", ""):
+
+        async def events() -> AsyncIterator[str]:
+            queue: asyncio.Queue[dict[str, str]] = asyncio.Queue(maxsize=64)
+            released = False
+
+            def release_once() -> None:
+                nonlocal released
+                if not released:
+                    released = True
+                    release_assistant_request(session, reservation)
+
+            async def publish(event: dict[str, str]) -> None:
+                # A stalled/disconnected browser must not retain a producer/lease
+                # indefinitely, including terminal frames outside the model timeout.
+                async with asyncio.timeout(2):
+                    await queue.put(event)
+
+            async def produce() -> None:
+                try:
+                    if isinstance(assistant, AssistantService):
+                        reply = await assistant.respond_with_events(
+                            message=payload.message,
+                            request_id=request_id,
+                            tool_context=context,
+                            on_event=publish,
+                        )
+                    else:
+                        # Compatibility with offline responders; no provider fallback/retry.
+                        reply = await assistant.respond(
+                            message=payload.message,
+                            request_id=request_id,
+                            tool_context=context,
+                        )
+                    await publish(
+                        {
+                            "type": "done",
+                            "reply": reply.text,
+                            "model": reply.model,
+                            "response_id": reply.response_id,
+                        }
+                    )
+                except Exception as error:
+                    key = "timeout" if isinstance(error, AssistantTimeoutError) else "unavailable"
+                    with suppress(TimeoutError):
+                        await publish(
+                            {
+                                "type": "error",
+                                "status": "504" if key == "timeout" else "503",
+                                "detail": _detail(payload.lang, key),
+                            }
+                        )
+                finally:
+                    try:
+                        # End read/failed-write transactions even if the socket remains
+                        # stalled. All valid tool writes commit themselves before return.
+                        session.rollback()
+                    finally:
+                        release_once()
+
+            task = asyncio.create_task(produce())
+            try:
+                yield 'data: {"type":"progress","stage":"thinking"}\n\n'
+                while True:
+                    if task.done() and queue.empty():
+                        yield 'data: {"type":"error","status":"503"}\n\n'
+                        break
+                    event = await queue.get()
+                    yield "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+                    if event["type"] in {"done", "error"}:
+                        break
+            finally:
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
+                release_once()
+
+        return StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+        )
     try:
         reply = await assistant.respond(
             message=payload.message,
             request_id=request_id,
-            tool_context=AssistantToolContext(
-                session=session,
-                user=user,
-                request_id=request_id,
-                message=payload.message,
-                lang=payload.lang,
-                history=tuple(payload.history),
-            ),
+            tool_context=context,
         )
     except AssistantConfigurationError as error:
         raise HTTPException(

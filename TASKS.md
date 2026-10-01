@@ -64,6 +64,10 @@ do not claim the role was disabled or retry administrator-only operations.
   that second endpoint commit after fresh gates, leaving all business state/schema/policies.
   This is not a tested production rollback or permission to revert the entire feature batch.
   Domain defects require a reviewed forward repair. See [ROLLBACK.md](docs/ROLLBACK.md).
+- Compatible recovery commit created locally: `ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55`,
+  `Add grouped pickup checkout and cancellable orders with compatible chat recovery`.
+  It is not an old pre-feature baseline; streaming-only recovery retains every new business
+  format and guard. No push/deploy yet. The final endpoint commit receives177-test verification.
 - Fresh production preflight: remote main `2ac190c`, serving image `5a99117`, ready revision42
   with100% latest traffic; no queued production run. Runtime read-only role/TLS/least privileges
   intact, separate migration identity, current schema `e5f6a7b8c9d0`,12 meals/12 chunks.

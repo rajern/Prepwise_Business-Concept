@@ -1,7 +1,9 @@
 # Customer experience update — 2026-10-01
 
-Implemented after owner approval; resumed release validation is complete, **delivery pending**.
+Implemented, pushed and production-verified after owner approval on2026-10-01.
 Starting point: clean `main`, `2ac190cd505da8db378358b63e0fcdbb06bc72c4`.
+Delivery: `281c8b4ab8b91c2d22c45415823f787cc6657884`,
+[successful CI/deploy/smoke workflow36851140473](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/36851140473).
 
 ## Implemented behaviour
 
@@ -35,21 +37,23 @@ Starting point: clean `main`, `2ac190cd505da8db378358b63e0fcdbb06bc72c4`.
 
 | Check | Result |
 | --- | --- |
-| Full backend pytest |168 passed;9 PostgreSQL-dependent tests skipped |
+| Full backend pytest |177 passed;9 real PostgreSQL-dependent cases included, no skips |
 | Backend Ruff lint/format and strict mypy |Pass |
-| Frontend unit tests |53 passed |
+| Frontend unit tests |54 passed, including compatible JSON recovery regression |
 | Frontend ESLint, TypeScript, production build |Pass |
-| Playwright customer/admin/layout/image scenarios |9 passed using isolated SQLite API |
+| Playwright customer/admin/layout/image scenarios |9 passed using isolated migrated PostgreSQL API; CI also passed |
 | Desktop/mobile screenshot review |8 screens: meal dialog, grouped cart, upcoming orders, history;1280/390 widths |
 | New SSE offline regressions |Auth/quota, draft reset/final confirmation, incomplete/missing usage, disconnect<=1s, bounded queue and exactly-once lease cleanup |
-| Gitleaks redacted changed/new source and complete history |Pass;63 commits scanned |
+| Gitleaks redacted changed/new source and complete history |Pass;65 commits scanned before release push |
 
-Browser checks establish UX/API behaviour, **not** PostgreSQL migrations, transaction advisory
-locks, races, runtime grants or pgvector. Local helper `backend/scripts/local_ui_test_server.py`
+Initial SQLite browser checks established UX/API behaviour, not PostgreSQL evidence. The resumed
+release reran browsers against migrated PostgreSQL and all9 PG backend cases without skipping.
+Local helper `backend/scripts/local_ui_test_server.py`
 creates a disposable SQLite test database, provisions only test identities, binds loopback and
 disables AI. Production never uses the helper. Normal CI retains migrated PostgreSQL coverage.
 
-No new billable model/embedding calls were made. Five-item synthetic workflow uses7 model rounds
+No new billable conversational model calls were made; changed-chunk deployment embeddings were
+explicitly owner-approved and the resulting14-chunk index matches local metadata. Five-item synthetic workflow uses7 model rounds
 instead of9, but mock responses do not prove actual live quality or response-time improvement.
 Real model evals require a fresh explicitly bounded approval; the earlier10-call approval is spent.
 
@@ -70,15 +74,25 @@ This is not a production rollback drill, nor a way to undo all features; domain 
 a compatible forward repair. See `ROLLBACK.md`; never downgrade/delete business data.
 
 Validated compatible recovery commit: `ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55`.
-The following delivery commit changes only the SSE route/regressions and release evidence;
+The delivery commit281c8b4 changes only the SSE route/regressions and release evidence;
 all migration, persisted-domain, runtime-grant, frontend and knowledge files remain identical.
 
-New policy documents intentionally change KB12->14 chunks; the existing deployment indexer may
-now synchronize changed chunks under the owner's explicit embedding approval. Conversational
+New policy documents intentionally changed KB12->14 chunks; the existing deployment indexer
+synchronized changed chunks under the owner's explicit embedding approval. Conversational
 model evaluation/image generation remains unapproved; no such paid calls were made.
 
-Then follow existing CI/deploy for the exact pushed SHA, including public smoke and fresh runtime
-grant/knowledge-state verification. Production is unchanged by this work.
+## Production delivery evidence
+
+All6 required CI jobs, deployment and workflow smoke passed for the exact pushed SHA above.
+Azure image is SHA-tagged281c8b4, latest/ready revision `ca-prepwise-prod--0000043`,100% latest
+traffic. Read-only production confirms schema `f6a7b8c9d0e1`,12 meals,14 exact matching knowledge
+source/hash/model tuples, client TLS and the restricted runtime identity separate from migrations.
+All16 tables match the reviewed privileges with no grant options, including new cart_groups.
+Independent public checks passed the new frontend bundle `/assets/app-yljkoTip.js`, security
+headers, live/ready,12 NO/EN meals,6meat/4vegetarian/2fish categories, every image's local hash,
+missing-image404,5 pickup days/2 slots, CORS/Retry-After, new group/cancel routes and unauthenticated
+SSE401. No authenticated real-customer order/chat request was made; do not claim measured live
+model latency/quality or a production rollback drill. Temporary local test API/container removed.
 
 API streaming follows [official OpenAI streaming guidance](https://developers.openai.com/api/docs/guides/streaming-responses);
 reducing redundant serial calls follows [latency guidance](https://developers.openai.com/api/docs/guides/latency-optimization).

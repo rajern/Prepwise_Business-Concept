@@ -53,7 +53,21 @@ The single-code-only-commit/no-op procedure below remains applicable to later el
 For this two-commit feature release only commit2 is the eligible candidate and point1 its base;
 the code-only recovery itself must make no new migration, seed, role or embedding changes.
 
-## Known public baseline (2026-09-30)
+## Current serving release baseline (2026-10-01)
+
+- Source/image SHA: `281c8b4ab8b91c2d22c45415823f787cc6657884`.
+- [Workflow36851140473](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/36851140473)
+  completed successfully: all6 required CI jobs, deployment and production smoke.
+- Latest/ready revision `ca-prepwise-prod--0000043`,100% latest traffic; frontend bundle
+  `/assets/app-yljkoTip.js`, independent public checks passed.
+- Read-only schema `f6a7b8c9d0e1`,12 meals,14 source-key/hash/model-matching knowledge chunks,
+  client TLS and exact16-table restricted runtime grants; separate migration identity.
+- Narrow compatible JSON recovery source: `ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55`.
+  Revert ONLY the streaming commit281c8b4 after fresh gates; subsequent evidence-only commits
+  must be inspected and retained. Evidence conflicts are a stop, not permission to reset source.
+  The pre-feature baseline below is historical and must never be selected after group/cancel use.
+
+## Historical public baseline (2026-09-30)
 
 | Item | Observed value |
 | --- | --- |

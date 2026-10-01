@@ -24,19 +24,20 @@ If none exists, stop; do not invent tasks, repeat unchanged failures or reopen c
 Only the main agent updates this queue. At most two subagents may work on disjoint subtasks.
 Never overwrite unrelated changes or start a second worker on an already claimed task.
 
-**Active task:** P4 release validation/delivery, resumed by owner on 2026-10-01.
-**Next independent task:** None. Do not start overlapping work during delivery.
+**Active task:** None; P1–P4 delivered and production-verified on2026-10-01.
+**Next independent task:** None. Do not invent work or repeat exhausted live model evaluations.
 Two workers completed disjoint order backend / customer frontend changes; main agent completed
-assistant/catalogue/integration. Baseline worktree was clean at `2ac190c` on main; changes remain local.
+assistant/catalogue/integration. Baseline worktree was clean at `2ac190c` on main; delivery is
+`281c8b4` with compatible JSON recovery point `ac4cbcd`.
 Legacy-role cleanup N8 is separate from this batch. Owner reported rotating its password;
 do not claim the role was disabled or retry administrator-only operations.
 
 | Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
 | --- | --- | --- | --- | --- |
-| 0a / P1 | Persistent multi-day cart groups and deadline-based cancellation | Complete local implementation, 2026-10-01 | None | Independent persisted pickup selections, selected-group transactional checkout, others preserved; button cancellation before pickup-day midnight Europe/Oslo; ownership, terminal status and DST offline tests pass. PostgreSQL concurrency/migration/runtime checks remain P4. |
-| 0b / P2 | Customer cart/order/detail UX | Complete local implementation, 2026-10-01 | P1 API contract | Editable groups, active orders above meals, terminal history navigation, close/switch details with stale guards, accessible meal dialog; bilingual/mobile unit and browser checks pass. |
-| 0c / P3 | Assistant search quality and latency | Complete offline implementation, 2026-10-01 | P1 integration contract | Model/low effort/quotas unchanged; all12 menu items fit default page20 with counts; guarded recipe categories/unknowns, non-narrowing ingredient search, committed authoritative cart-read reuse; SSE drafts/final/error/disconnect/backpressure regressions pass. No new paid calls or live model-quality/latency claim. |
-| 0d / P4 | Production release preflight and delivery | In progress: prerequisites validated; delivery pending | P1, P2, P3 | Owner approved changed-chunk embedding calls and conditional push/deploy. Docker responds with reviewed permissions; isolated PostgreSQL migration and all177 tests pass. Same-schema JSON recovery point passed171 tests, Docker build and synthetic persisted-group/cancelled-order drill; all9 browser tests pass against migrated PG and54 frontend unit tests pass. Publish as compatible feature baseline followed by narrowly scoped SSE endpoint commit; no rollback to pre-group code or DB downgrade. Follow exact SHA CI/deploy/public and runtime/index checks. |
+| 0a / P1 | Persistent multi-day cart groups and deadline-based cancellation | Complete, deployed2026-10-01 | None | Independent persisted pickup selections, selected-group transactional checkout, others preserved; button cancellation before pickup-day midnight Europe/Oslo; ownership, terminal status, DST and real PG concurrency/migration/runtime-grant checks pass. |
+| 0b / P2 | Customer cart/order/detail UX | Complete, deployed2026-10-01 | P1 API contract | Editable groups, active orders above meals, terminal history navigation, close/switch details with stale guards, accessible meal dialog; bilingual/mobile unit and migrated-PG browser checks pass. |
+| 0c / P3 | Assistant search quality and latency | Complete, deployed2026-10-01; no live quality/latency claim | P1 integration contract | Model/low effort/quotas unchanged; all12 menu items fit default page20 with counts; guarded recipe categories/unknowns, non-narrowing ingredient search, committed authoritative cart-read reuse; SSE drafts/final/error/disconnect/backpressure regressions pass. Only owner-approved changed-chunk embedding work, no new conversational model evaluation. |
+| 0d / P4 | Production release preflight and delivery | Complete, production verified2026-10-01 | P1, P2, P3 | All177 backend/54 frontend/9 migrated-PG browser checks pass; compatible JSON recovery validated. Exact release281c8b4 CI/deploy/smoke successful, revision43 ready at100% traffic. Read-only production verifies headf6a7b8c9d0e1, exact16-table grants/TLS/restricted separate runtime identity,14 matching KB chunks. No pre-group rollback/DB downgrade or paid chat evaluation. |
 | 1 / N1 | Prepare nightly queue and verify delivery access | Complete, 2026-09-30 | None | Clean baseline `6e33e57`; Git remote and push dry-run pass with approved network access; Azure login valid; existing CI/deploy successful; public frontend, health, bilingual meals, pickup windows and CORS checked. Scheduler and unattended permission limitations are documented below. |
 | 2 / N2 | Document and validate a code-only rollback runbook | Complete, 2026-09-30 | N1 | [ROLLBACK.md](docs/ROLLBACK.md) records exact baseline `5f80726`, fresh no-op preflight, ordinary revert/redeploy, partial-deploy handling and fail-closed stops. Commands validated read-only; no actual rollback/drill or automatic controller enabled. |
 | 3 / N3 | Verify production assistant runtime grants/configuration | Complete review and replacement verification | N1 | Initial overprivilege finding remediated for the serving application by N7. Approved limits/auth, Key Vault bindings, TLS, migrations and exact replacement privileges verified. Legacy administrator-role retirement remains N8; see [production review](docs/PRODUCTION_AI_REVIEW.md). |
@@ -48,6 +49,25 @@ do not claim the role was disabled or retry administrator-only operations.
 
 ### Customer-experience release retry — 2026-10-01
 
+- Delivered source `281c8b4ab8b91c2d22c45415823f787cc6657884`, commit
+  `Stream assistant replies with bounded cleanup and verified recovery`, immediately after
+  compatible recovery `ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55`. Both pushed normally together.
+  [Workflow36851140473](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/36851140473)
+  completed successfully: all6 required CI jobs, deploy, and production smoke passed.
+- Fresh Azure inspection: desired/serving SHA281c8b4, latest/ready revision
+  `ca-prepwise-prod--0000043`,100% latest traffic. Independent public smoke passed frontend
+  headers/new bundle `/assets/app-yljkoTip.js`, live/ready,12 bilingual meals/categories
+  (6meat/4vegetarian/2fish),12 WebPs identical to local hashes, missing-image404,5 days/2 slots,
+  CORS/Retry-After, new groups/cancel OpenAPI routes and unauthenticated SSE401.
+- Production READ ONLY inspection verifies `f6a7b8c9d0e1`,12 meals, all14 KB source-key/hash/model
+  tuples matching local documents; exact16-table privilege map including cart_groups matches
+  with no grant options. Client TLS, non-administrative/no-membership/no-schema-CREATE runtime,
+  separate migration identity retained. No production authenticated customer/order test writes
+  or paid conversational model calls; actual chat quality/latency needs separately approved eval.
+- Changed/new-source scans and complete65-commit redacted history scan passed before push.
+  Temporary loopback API stopped and ONLY the created test container/disposable volume removed.
+  Docker Desktop and the locally built recovery image remain; no other user process/data cleanup.
+  No remaining Ready task; N8 remains the prior owner/admin blocker, not retried or resolved here.
 - Owner explicitly approved paid changed-chunk embeddings and conditional commit/push/deploy
   after successful validation. No new paid conversational model/image evaluation is authorized.
 - Docker engine28.5.1 responds with reviewed access. Created only the dedicated loopback
@@ -59,7 +79,7 @@ do not claim the role was disabled or retry administrator-only operations.
   another group's preservation, authenticated JSON response to the SSE-capable frontend.
   The new frontend JSON fallback regression passes;54 unit tests/types/lint/build and all9
   Playwright scenarios pass against migrated PostgreSQL. No provider call in these checks.
-- Delivery will preserve that recovery source as the first commit, then enable only the SSE
+- Delivery preserved that recovery source as the first commit, then enabled only the SSE
   HTTP endpoint and its6 regressions in a second commit. An incident recovery may revert ONLY
   that second endpoint commit after fresh gates, leaving all business state/schema/policies.
   This is not a tested production rollback or permission to revert the entire feature batch.
@@ -67,7 +87,8 @@ do not claim the role was disabled or retry administrator-only operations.
 - Compatible recovery commit created locally: `ac4cbcdbc2be79c2d3d3b2709477256a3d1adb55`,
   `Add grouped pickup checkout and cancellable orders with compatible chat recovery`.
   It is not an old pre-feature baseline; streaming-only recovery retains every new business
-  format and guard. No push/deploy yet. The final endpoint commit receives177-test verification.
+  format and guard. At that checkpoint no push/deploy had occurred; the final endpoint commit
+  subsequently passed177 tests and was delivered as recorded above.
 - Fresh production preflight: remote main `2ac190c`, serving image `5a99117`, ready revision42
   with100% latest traffic; no queued production run. Runtime read-only role/TLS/least privileges
   intact, separate migration identity, current schema `e5f6a7b8c9d0`,12 meals/12 chunks.

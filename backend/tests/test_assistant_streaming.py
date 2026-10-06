@@ -46,10 +46,12 @@ def streaming_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ASSISTANT_STREAMING_ENABLED", "true")
 
 
-def test_recovery_setting_defaults_to_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_delivery_setting_defaults_to_streaming(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv("ASSISTANT_STREAMING_ENABLED", raising=False)
     monkeypatch.chdir(tmp_path)
-    assert Settings().assistant_streaming_enabled is False
+    assert Settings().assistant_streaming_enabled is True
 
 
 def test_json_recovery_retains_key_guard_for_sse_browser(

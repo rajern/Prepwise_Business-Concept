@@ -32,6 +32,13 @@ The cloud has no explicit override of this setting. Reverting ONLY that activati
 can restore JSON transport without weakening replay/order safety or changing persisted state.
 Domain defects require a compatible forward fix; never revert the checkpoint/full feature batch.
 
+Exact compatible JSON source: `82498ac9cae0dc3530c2802f4072a9dbd040b41f`.
+The activation candidate must be its single direct child, and its complete diff is restricted
+to `backend/src/prepwise_api/config.py`, the default regression in
+`backend/tests/test_assistant_streaming.py`, `TASKS.md` and this release evidence. Do not treat
+the whole feature commit as a code-only rollback candidate. A later evidence-only commit may
+follow deployment; inspect/preserve that evidence instead of requiring the bad commit at HEAD.
+
 The locally built checkpoint image
 `sha256:f16cacdecedfeaccddb9f63b369d1470a994c5b0668a49ee9b17b591f02d1fb7`
 passed `scripts/recovery-image-drill.py` against the freshly migrated, explicitly named local

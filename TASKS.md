@@ -71,6 +71,10 @@ do not claim the role was disabled or retry administrator-only operations.
   passed the offline migrated-PG drill in `scripts/recovery-image-drill.py`: cancelled keyed-order
   replay returns the original order, preserves other groups/newer cart, JSON fallback responds,
   and committed partial chat writes block replay. Zero provider calls; no production rollback drill.
+- Compatible recovery source committed as `82498ac9cae0dc3530c2802f4072a9dbd040b41f`,
+  `Guard chat retries and reviewed checkout with compatible recovery`. Streaming activation
+  changes only its default, the default regression and this/runbook evidence; no schema/domain/
+  frontend/KB/SDK/grant change. Both are intended to be pushed together after final checks.
 - Backend222 tests and frontend75 tests pass; lint/format/strict types and frontend build pass.
   All9 browser scenarios pass against the migrated local PostgreSQL API; Docker image and
   Bicep compilation pass. Redacted Gitleaks history (66 commits) and current known source/docs/

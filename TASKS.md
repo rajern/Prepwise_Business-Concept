@@ -26,7 +26,7 @@ The owner explicitly approved three disjoint workers for the interactive archite
 batch below; this does not expand the nightly worker limit or authorize deployment.
 Never overwrite unrelated changes or start a second worker on an already claimed task.
 
-**Active task:** AR5 — owner-approved release validation and deployment, 2026-10-06.
+**Active task:** None. AR1–AR5 are deployed and verified, 2026-10-06.
 **Next independent task:** None Ready. N8 remains administrator-only. Do not reopen historical completed tasks.
 Historical P1–P4 delivery: two workers completed order backend / customer frontend; main completed
 assistant/catalogue/integration. Baseline worktree was clean at `2ac190c` on main; delivery is
@@ -36,11 +36,11 @@ do not claim the role was disabled or retry administrator-only operations.
 
 | Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
 | --- | --- | --- | --- | --- |
-| 0 / AR1 | SDK replay and safe chat-request replay | Complete locally, 2026-10-06 | Owner-approved audit fixes | Real AsyncOpenAI/offline HTTP-SSE continuation; SDK parsed fields removed; owner/key/hash receipts, pre-write marker and fenced retries; correlated JSON/SSE outcomes; quota rejection creates no receipt. |
-| 0 / AR2 | Reviewed checkout and cart concurrency | Complete locally, 2026-10-06 | AR3 API integration | Mandatory item/group CAS; authoritative reviewed snapshot, keyed repeat-safe checkout and explicit no-order rejection proof; atomic selected scope; same full snapshot in chat confirmation; PG concurrency regressions pass. |
-| 0 / AR3 | Customer synchronization, time classification and token lifecycle | Complete locally, 2026-10-06 | AR1/AR2 agreed API contracts | History by pickup-window end without false completion; stale-response/draft/clock guards; safe checkout/chat retry receipts; account-bound silent tokens and bounded waits; 75 frontend and 9 browser tests pass. |
-| 0 / AR4 | Integrate, verify and document architecture repairs | Complete locally, 2026-10-06 | AR1–AR3 | Migration/grants/model integration; 220 backend tests including15 real PG cases plus grant-plan metadata check, lint/format/mypy, frontend lint/types/build and redacted scans pass. No commit/push/deploy, production role/secret change or paid call. |
-| 0 / AR5 | Validate and deliver architecture-repair release | In progress: owner approved release, 2026-10-06 | AR1–AR4 | Matching migration/runtime grants/frontend/API; compatible JSON recovery retaining review/CAS/replay guards; approved changed-chunk KB indexing; fresh CI/deploy/exact-SHA production checks. Old rollback targets remain unsafe. |
+| 0 / AR1 | SDK replay and safe chat-request replay | Complete, deployed2026-10-06 | Owner-approved audit fixes | Real AsyncOpenAI/offline HTTP-SSE continuation; SDK parsed fields removed; owner/key/hash receipts, pre-write marker and fenced retries; correlated JSON/SSE outcomes; quota rejection creates no receipt. |
+| 0 / AR2 | Reviewed checkout and cart concurrency | Complete, deployed2026-10-06 | AR3 API integration | Mandatory item/group CAS; authoritative reviewed snapshot, keyed repeat-safe checkout and explicit no-order rejection proof; atomic selected scope; same full snapshot in chat confirmation; PG concurrency regressions pass. |
+| 0 / AR3 | Customer synchronization, time classification and token lifecycle | Complete, deployed2026-10-06 | AR1/AR2 agreed API contracts | History by pickup-window end without false completion; stale-response/draft/clock guards; safe checkout/chat retry receipts; account-bound silent tokens and bounded waits; 75 frontend and 9 browser tests pass. |
+| 0 / AR4 | Integrate, verify and document architecture repairs | Complete, deployed2026-10-06 | AR1–AR3 | Migration/grants/model integration; 222 backend tests including15 real PG cases plus grant-plan metadata check; lint/format/mypy, frontend lint/types/build, Docker/Bicep and redacted scans pass. |
+| 0 / AR5 | Validate and deliver architecture-repair release | Complete, production verified2026-10-06 | AR1–AR4 | Exact release aaaac1d CI/deploy/smoke green; ready revision44 at100% traffic; schema a7b8c9d0e1f2, exact17-table grants/TLS and15 matching KB chunks verified. Compatible JSON source82498ac; no live paid chat eval or production rollback. |
 | 0a / P1 | Persistent multi-day cart groups and deadline-based cancellation | Complete, deployed2026-10-01 | None | Independent persisted pickup selections, selected-group transactional checkout, others preserved; button cancellation before pickup-day midnight Europe/Oslo; ownership, terminal status, DST and real PG concurrency/migration/runtime-grant checks pass. |
 | 0b / P2 | Customer cart/order/detail UX | Complete, deployed2026-10-01 | P1 API contract | Editable groups, active orders above meals, terminal history navigation, close/switch details with stale guards, accessible meal dialog; bilingual/mobile unit and migrated-PG browser checks pass. |
 | 0c / P3 | Assistant search quality and latency | Complete, deployed2026-10-01; no live quality/latency claim | P1 integration contract | Model/low effort/quotas unchanged; all12 menu items fit default page20 with counts; guarded recipe categories/unknowns, non-narrowing ingredient search, committed authoritative cart-read reuse; SSE drafts/final/error/disconnect/backpressure regressions pass. Only owner-approved changed-chunk embedding work, no new conversational model evaluation. |
@@ -56,6 +56,27 @@ do not claim the role was disabled or retry administrator-only operations.
 
 ### Architecture repair release — 2026-10-06
 
+- Delivered source `aaaac1d0e4d80b551247dcf1560de066edab3bd4`,
+  `Enable guarded assistant streaming after verified release checks`, immediately after
+  recovery `82498ac9cae0dc3530c2802f4072a9dbd040b41f`. Both pushed normally together;
+  [workflow37497144030](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/37497144030)
+  completed successfully with all6 required CI jobs, full deploy and production smoke.
+- Independent postflight: desired/ready image uses the exact release SHA; latest/ready
+  `ca-prepwise-prod--0000044`,100% latest traffic. Frontend bundle `/assets/app-0b9Mmakg.js`
+  contains reviewed checkout/CAS/retry contracts. Public health,5 security headers,12 bilingual
+  meals/details/WebPs, missing-image404,5 pickup days/2 windows, CORS/Retry-After and
+  unauthenticated SSE401 pass. OpenAPI requires reviewed order keys and item/group CAS.
+- Read-only production postflight confirms `a7b8c9d0e1f2`, exact17-table runtime privileges,
+  client TLS/nonprivileged role/no membership/schema CREATE and15 KB source-key/hash/model
+  tuples identical to the delivered documents. Indexing is now a no-op. Cloud model remains
+  `gpt-5.6-terra`/low with `text-embedding-3-small`; production mode, no E2E auth override and
+  no streaming override. No direct production business test writes or paid conversational calls.
+  Actual signed-in chat/order UX still merits owner smoke; no live quality/latency claim.
+- Final222 backend/75 frontend/9 migrated-PG browser checks pass. Full68-commit redacted
+  history scan including both release commits passed before push. Own loopback servers stopped;
+  only identity-validated `prepwise-ar-release-test-20261006` was stopped/auto-removed with its
+  disposable test data. Docker Desktop/cached images and other user data/processes preserved.
+  Evidence-only documentation follows with `[skip ci]`; serving release remains aaaac1d.
 - Owner explicitly approved completing release prerequisites, then commit/push/deploy.
   Approval includes changed-chunk embeddings for the revised public order/retry guidance;
   it does not include paid conversational/image evals, secret changes or database rollback.
@@ -74,11 +95,11 @@ do not claim the role was disabled or retry administrator-only operations.
 - Compatible recovery source committed as `82498ac9cae0dc3530c2802f4072a9dbd040b41f`,
   `Guard chat retries and reviewed checkout with compatible recovery`. Streaming activation
   changes only its default, the default regression and this/runbook evidence; no schema/domain/
-  frontend/KB/SDK/grant change. Both are intended to be pushed together after final checks.
+  frontend/KB/SDK/grant change. Both were pushed together after final checks.
 - Backend222 tests and frontend75 tests pass; lint/format/strict types and frontend build pass.
   All9 browser scenarios pass against the migrated local PostgreSQL API; Docker image and
   Bicep compilation pass. Redacted Gitleaks history (66 commits) and current known source/docs/
-  untracked scripts pass. Exact-SHA CI/deploy/production validation is still in progress.
+  untracked scripts pass. Exact-SHA CI/deploy/production validation subsequently passed above.
   `scripts/release-readonly.py` checks safe production metadata in a read-only transaction and
   never prints credentials/customer records. The unchanged legacy login is still N8.
 

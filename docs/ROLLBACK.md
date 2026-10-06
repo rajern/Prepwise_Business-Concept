@@ -103,7 +103,21 @@ The single-code-only-commit/no-op procedure below remains applicable to later el
 For this two-commit feature release only commit2 is the eligible candidate and point1 its base;
 the code-only recovery itself must make no new migration, seed, role or embedding changes.
 
-## Current serving release baseline (2026-10-01)
+## Current serving architecture-repair baseline (2026-10-06)
+
+- Serving source/image `aaaac1d0e4d80b551247dcf1560de066edab3bd4` is the streaming activation
+  candidate. Parent/compatible JSON checkpoint `82498ac9cae0dc3530c2802f4072a9dbd040b41f`.
+- [Workflow37497144030](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/37497144030)
+  passed all6 required CI jobs, deploy and production smoke. Latest/ready revision
+  `ca-prepwise-prod--0000044`,100% latest traffic; bundle `/assets/app-0b9Mmakg.js`.
+- Read-only postflight: schema `a7b8c9d0e1f2`,12 meals, exact17-table restricted runtime grants,
+  client TLS and15 KB source-key/hash/model tuples matching the delivered documents; indexing
+  would be a no-op. No streaming/test-auth override; selected model/low effort unchanged.
+- Only the activation commit is eligible for narrow JSON recovery after fresh gates, not the
+  feature checkpoint or old releases below. No real production rollback was performed.
+  Evidence-only documentation may follow with `[skip ci]`; serving SHA is still aaaac1d.
+
+## Historical grouped-order release baseline (2026-10-01)
 
 - Source/image SHA: `281c8b4ab8b91c2d22c45415823f787cc6657884`.
 - [Workflow36851140473](https://github.com/rajern/Prepwise_Business-Concept/actions/runs/36851140473)

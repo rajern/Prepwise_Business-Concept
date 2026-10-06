@@ -25,11 +25,14 @@ import {
 } from './api/pickupLocations'
 import {
   createOrder,
+  reviewOrder,
   cancelOrder,
   fetchOrder,
   fetchOrders,
   type OrderDetail,
   type OrderSummary,
+  type OrderPurchase,
+  type OrderReview,
 } from './api/orders'
 import type { CurrentUser } from './api/me'
 import { AdminPage } from './admin/AdminPage'
@@ -40,6 +43,7 @@ import { LanguageProvider, useLanguage, formatNok, formatPickup } from './i18n'
 import { CartDrawer } from './components/CartDrawer'
 import { MealArtwork } from './components/MealArtwork'
 import { GroupedCart, type CheckoutSelection } from './components/GroupedCart'
+import { canCancelOrder, isUpcomingOrder, osloDate } from './orderState'
 
 type CatalogueFilter = 'all' | 'high-protein' | 'under-600'
 
@@ -85,6 +89,13 @@ function AppContent({
   const [cartError, setCartError] = useState<string | null>(null)
   const [cartMutationKey, setCartMutationKey] = useState<string | null>(null)
   const cartVersion = useRef(0)
+  const cartReadSequence = useRef(0)
+  const orderReadSequence = useRef(0)
+  const pickupReadSequence = useRef(0)
+  const detailVersion = useRef(0)
+  const readController = useRef<AbortController | null>(null)
+  const pendingCheckout = useRef<{ token: string; language: typeof language; purchase: OrderPurchase; review: OrderReview } | null>(null)
+  const [checkoutUncertain, setCheckoutUncertain] = useState(false)
   const cartWriteBusy = useRef(false)
   const [pickupLocations, setPickupLocations] = useState<PickupLocation[] | null>(
     null,
@@ -104,13 +115,19 @@ function AppContent({
   const [isCancelling, setIsCancelling] = useState(false)
   const [orderDetailError, setOrderDetailError] = useState<string | null>(null)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  const [now, setNow] = useState(Date.now)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(
     initialCurrentUser,
   )
 
   const handleAccessTokenChange = useCallback((nextAccessToken: string | null) => {
+    if (!nextAccessToken && sessionRef.current.token) { try { sessionStorage.removeItem('prepwise-checkout') } catch { /* Optional storage. */ } }
     cartVersion.current += 1
     ordersVersion.current += 1
+    detailVersion.current += 1
+    readController.current?.abort()
+    pendingCheckout.current = null
+    setCheckoutUncertain(false)
     cartWriteBusy.current = false
     sessionRef.current = { ...sessionRef.current, token: nextAccessToken }
     setAccessToken(nextAccessToken)
@@ -132,6 +149,75 @@ function AppContent({
       setCurrentUser(null)
     }
   }, [])
+
+  useEffect(() => {
+    if (!accessToken || !currentUser?.id || pendingCheckout.current) return
+    try {
+      const saved = JSON.parse(sessionStorage.getItem('prepwise-checkout') ?? 'null')
+      if (saved?.userId !== currentUser.id) { sessionStorage.removeItem('prepwise-checkout'); return }
+      if (saved.purchase && typeof saved.purchase.idempotency_key === 'string' && typeof saved.purchase.review_fingerprint === 'string' && saved.review && (saved.language === 'no' || saved.language === 'en')) {
+        pendingCheckout.current = { token: accessToken, language: saved.language, purchase: saved.purchase, review: saved.review }
+        queueMicrotask(() => { if (sessionRef.current.token === accessToken) setCheckoutUncertain(true) })
+      }
+    } catch { /* Optional storage. */ }
+  }, [accessToken, currentUser?.id])
+
+  const refreshCustomerState = useCallback(async () => {
+    if (!accessToken || isAdminRoute) return
+    const expected = { token: accessToken, language }
+    const cartSequence = ++cartReadSequence.current
+    const orderSequence = ++orderReadSequence.current
+    const expectedCartVersion = cartVersion.current
+    const expectedOrdersVersion = ordersVersion.current
+    readController.current?.abort()
+    const controller = new AbortController()
+    readController.current = controller
+    let timedOut = false
+    const timer = window.setTimeout(() => { timedOut = true; controller.abort() }, 15000)
+    try {
+      const results = await Promise.allSettled([
+        fetchCart(accessToken, controller.signal, language), fetchOrders(accessToken, controller.signal, language),
+      ])
+      if (sessionRef.current.token !== expected.token || sessionRef.current.language !== expected.language) return
+      if (cartSequence === cartReadSequence.current && cartVersion.current === expectedCartVersion) {
+        if (results[0].status === 'fulfilled') { setCart(results[0].value); setCartError(null) }
+        else if (!controller.signal.aborted || timedOut) setCartError(customerError(results[0].reason, 'We could not load your cart. Please try again.'))
+      }
+      if (orderSequence === orderReadSequence.current && ordersVersion.current === expectedOrdersVersion) {
+        if (results[1].status === 'fulfilled') { setOrders(results[1].value); setOrdersError(null) }
+        else if (!controller.signal.aborted || timedOut) setOrdersError(customerError(results[1].reason, 'We could not load your order history. Please try again.'))
+      }
+    } finally { window.clearTimeout(timer) }
+  }, [accessToken, language, isAdminRoute, customerError])
+  const latestRefresh = useRef(refreshCustomerState)
+  useEffect(() => { latestRefresh.current = refreshCustomerState }, [refreshCustomerState])
+
+  const refreshPickupOptions = useCallback(async () => {
+    const sequence = ++pickupReadSequence.current
+    const expected = { token: accessToken, language }
+    try {
+      const options = await fetchPickupOptions()
+      if (sequence === pickupReadSequence.current && sessionRef.current.token === expected.token && sessionRef.current.language === expected.language) setPickupOptions(options)
+    } catch {
+      queueMicrotask(() => { if (sequence === pickupReadSequence.current && sessionRef.current.token === expected.token && sessionRef.current.language === expected.language) setCartError(t('We could not load the pickup times. Please try again.')) })
+    }
+  }, [accessToken, language, t])
+
+  useEffect(() => {
+    let day = osloDate(Date.now())
+    const tick = () => {
+      const value = Date.now()
+      setNow(value)
+      const nextDay = osloDate(value)
+      if (nextDay !== day) { day = nextDay; void refreshCustomerState(); void refreshPickupOptions() }
+    }
+    const focus = () => { tick(); void refreshCustomerState(); void refreshPickupOptions() }
+    const visibility = () => { if (document.visibilityState === 'visible') focus() }
+    const timer = window.setInterval(tick, 30000)
+    window.addEventListener('focus', focus)
+    document.addEventListener('visibilitychange', visibility)
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', focus); document.removeEventListener('visibilitychange', visibility) }
+  }, [refreshCustomerState, refreshPickupOptions])
 
   useEffect(() => {
     if (isAdminRoute) {
@@ -186,17 +272,7 @@ function AppContent({
 
     const controller = new AbortController()
 
-    const expectedCartVersion = cartVersion.current
-    const expectedOrdersVersion = ordersVersion.current
-    void fetchCart(accessToken, controller.signal, language)
-      .then((value) => { if (!controller.signal.aborted && cartVersion.current === expectedCartVersion) setCart(value) })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
-          setCartError(
-            customerError(reason, t('We could not load your cart. Please try again.')),
-          )
-        }
-      })
+    void refreshCustomerState()
 
     void fetchPickupLocations(controller.signal)
       .then((value) => { if (!controller.signal.aborted) setPickupLocations(value) })
@@ -211,35 +287,19 @@ function AppContent({
         }
       })
 
-    void fetchPickupOptions(controller.signal).then((value) => { if (!controller.signal.aborted) setPickupOptions(value) }).catch((reason: unknown) => {
-      if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
-        setCartError(t('We could not load the pickup times. Please try again.'))
-      }
-    })
+    queueMicrotask(() => { if (!controller.signal.aborted) void refreshPickupOptions() })
 
-    void fetchOrders(accessToken, controller.signal, language)
-      .then((value) => { if (!controller.signal.aborted && ordersVersion.current === expectedOrdersVersion) setOrders(value) })
-      .catch((reason: unknown) => {
-        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
-          setOrdersError(
-            customerError(
-              reason,
-              t('We could not load your order history. Please try again.'),
-            ),
-          )
-        }
-      })
-
-    return () => controller.abort()
-  }, [accessToken, isAdminRoute, language, customerError, t])
+    return () => { controller.abort(); readController.current?.abort() }
+  }, [accessToken, isAdminRoute, language, customerError, t, refreshCustomerState, refreshPickupOptions])
 
   useEffect(() => {
     if (!accessToken || !selectedOrderId) return
     const controller = new AbortController()
+    const version = detailVersion.current
     void fetchOrder(accessToken, selectedOrderId, controller.signal, language)
-      .then((value) => { if (!controller.signal.aborted) setSelectedOrder(value) })
+      .then((value) => { if (!controller.signal.aborted && detailVersion.current === version) { setSelectedOrder(value); setOrderDetailError(null) } })
       .catch((reason: unknown) => {
-        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
+        if (!controller.signal.aborted && detailVersion.current === version && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setOrderDetailError(customerError(reason, 'We could not load that order. Please try again.'))
         }
       })
@@ -252,31 +312,13 @@ function AppContent({
     return () => window.clearTimeout(timer)
   }, [cartNotice])
 
-  async function refreshCustomerState() {
-    if (!accessToken) return
-    const expected = { token: accessToken, language }
-    const expectedCartVersion = cartVersion.current
-    const expectedOrdersVersion = ordersVersion.current
-    const results = await Promise.allSettled([
-      fetchCart(accessToken, undefined, language), fetchOrders(accessToken, undefined, language),
-    ])
-    if (sessionRef.current.token !== expected.token || sessionRef.current.language !== expected.language) return
-    if (results[0].status === 'fulfilled' && cartVersion.current === expectedCartVersion) setCart(results[0].value)
-    if (results[1].status === 'fulfilled' && ordersVersion.current === expectedOrdersVersion) setOrders(results[1].value)
-    if (results.some((result) => result.status === 'rejected')) {
-      setCartError(t('We could not refresh your cart and orders. Open the cart to try again.'))
-    }
-  }
-
   async function openCart() {
     setCartOpen(true)
     if (!accessToken) return
     setCartError(null)
     await Promise.all([
       refreshCustomerState(),
-      fetchPickupOptions().then((options) => {
-        setPickupOptions(options)
-      }).catch(() => setCartError(t('We could not load the pickup times. Please try again.'))),
+      refreshPickupOptions(),
     ])
   }
 
@@ -333,8 +375,10 @@ function AppContent({
     if (!accessToken) {
       return
     }
+    const original = cart?.items.find((item) => item.id === itemId)
+    if (!original) return
     await runCartMutation(itemId, () =>
-      updateCartItem(accessToken, itemId, quantity, language),
+      updateCartItem(accessToken, itemId, quantity, language, undefined, original.quantity, original.group_id ?? null),
     )
   }
 
@@ -363,20 +407,26 @@ function AppContent({
     try {
       const next = await mutation()
       if (!isCurrent()) return
+      cartVersion.current += 1
       setCart(next)
       if (announce) setCartNotice(true)
     } catch (reason: unknown) {
       if (!isCurrent()) return
-      setCartError(
+      const message =
         reason instanceof ApiRequestError && reason.status === 409
-          ? t('That meal is no longer available.')
+          ? t('Your cart changed. Review the refreshed cart before trying again.')
           : customerError(
               reason,
               t('We could not update your cart. Please try again.'),
-            ),
-      )
+            )
+      await refreshCustomerState()
+      if (isCurrent()) setCartError(message)
     } finally {
-      if (sessionRef.current.token === expected.token) { cartWriteBusy.current = false; setCartMutationKey(null) }
+      if (sessionRef.current.token === expected.token) {
+        cartVersion.current += 1
+        cartWriteBusy.current = false; setCartMutationKey(null)
+        if (sessionRef.current.language !== expected.language) void latestRefresh.current()
+      }
     }
   }
 
@@ -393,7 +443,9 @@ function AppContent({
 
   async function savePickupGroup(id: string, fields: GroupSelection) {
     if (!accessToken) return
-    await runCartMutation(`group-${id}`, () => saveCartGroup(accessToken, id, fields, language))
+    const group = cart?.groups?.find((candidate) => candidate.id === id)
+    if (!group) return
+    await runCartMutation(`group-${id}`, () => saveCartGroup(accessToken, id, { ...fields, expected_version: group.version }, language))
   }
 
   async function removePickupGroup(id: string) {
@@ -407,19 +459,12 @@ function AppContent({
 
   async function moveItem(item: CartItem, groupId: string | null) {
     if (!accessToken) return
-    await runCartMutation(item.id, () => updateCartItem(accessToken, item.id, item.quantity, language, groupId))
+    await runCartMutation(item.id, () => updateCartItem(accessToken, item.id, item.quantity, language, groupId, item.quantity, item.group_id ?? null))
   }
 
   async function checkout(selection: CheckoutSelection) {
-    if (!accessToken || !cart || cartWriteBusy.current) return
+    if (!accessToken || cartWriteBusy.current) return
     const { location: locationId, date, slot } = selection
-    const location = pickupLocations?.find((candidate) => candidate.id === locationId)
-    const items = cart.items.filter((item) => (item.group_id ?? null) === selection.groupId)
-    if (!location || !items.length) return
-    const total = items.reduce((sum, item) => sum + Number(item.line_total_nok), 0)
-    if (!window.confirm(language === 'no'
-      ? `Bestill denne hentegruppen for ${formatNok(total, language)} med henting på ${location.name}, ${date} kl. ${slot.replace('-', ':00–')}:00?`
-      : `Place this pickup group order for ${formatNok(total, language)} with pickup at ${location.name}, ${date} ${slot.replace('-', ':00–')}:00?`)) return
     const expected = { token: accessToken, language }
     const isCurrent = () => sessionRef.current.token === expected.token && sessionRef.current.language === expected.language
     setIsCheckingOut(true)
@@ -428,20 +473,35 @@ function AppContent({
     cartVersion.current += 1
     setCartError(null)
     let committed = false
+    let submitted = false
     try {
-      let groupId = selection.groupId
-      // Legacy unassigned items are migrated to an explicit group when other groups exist.
-      if (!groupId && cart.groups?.some((group) => group.items.length > 0)) {
-        const created = await createCartGroup(accessToken, language)
-        const known = new Set(cart.groups.map((group) => group.id))
-        groupId = created.groups?.find((group) => !known.has(group.id))?.id ?? null
-        if (!groupId) throw new Error('Pickup group was not created')
-        for (const item of items) await updateCartItem(accessToken, item.id, item.quantity, language, groupId)
+      let attempt = pendingCheckout.current
+      if (attempt && attempt.token !== accessToken) return
+      if (attempt && (attempt.purchase.pickup_location_id !== locationId || attempt.purchase.pickup_date !== date || attempt.purchase.pickup_slot !== slot || attempt.purchase.group_id !== selection.groupId)) {
+        setCartError(t('Resolve the previous checkout before placing a different order.'))
+        return
       }
-      if (groupId) await saveCartGroup(accessToken, groupId, { pickup_location_id: locationId, pickup_date: date, pickup_slot: slot }, language)
-      const order = await createOrder(accessToken, locationId, date, slot, language, groupId)
+      if (!attempt) {
+        const orderSelection = { pickup_location_id: locationId, pickup_date: date, pickup_slot: slot, group_id: selection.groupId }
+        const review = await reviewOrder(accessToken, orderSelection, language)
+        if (!isCurrent()) return
+        const prompt = `${review.items.map((item) => `${item.quantity} × ${item.meal_name}: ${formatNok(item.line_total_nok, language)}`).join('\n')}\n\n${t('Total')}: ${formatNok(review.total_nok, language)}\n${review.pickup_location_name}\n${review.pickup_location_address}\n${formatPickup(review.pickup_start_at, review.pickup_end_at, language)}\n\n${t('Confirm this order?')}`
+        if (!window.confirm(prompt) || !isCurrent()) return
+        attempt = { token: accessToken, language, review, purchase: { ...orderSelection, review_fingerprint: review.review_fingerprint, idempotency_key: crypto.randomUUID() } }
+        pendingCheckout.current = attempt
+        try { sessionStorage.setItem('prepwise-checkout', JSON.stringify({ userId: currentUser?.id, language, purchase: attempt.purchase, review })) } catch { /* Optional storage. */ }
+      } else if (!window.confirm(t('Retry the previous checkout with the same request reference? No new order will be added if it already succeeded.')) || !isCurrent()) return
+      submitted = true
+      const order = await createOrder(accessToken, attempt.purchase, attempt.language)
       committed = true
+      if (sessionRef.current.token !== expected.token) return
+      pendingCheckout.current = null
+      setCheckoutUncertain(false)
+      try { sessionStorage.removeItem('prepwise-checkout') } catch { /* Optional storage. */ }
       if (!isCurrent()) return
+      cartVersion.current += 1
+      ordersVersion.current += 1
+      detailVersion.current += 1
       setCartOpen(false)
       setSelectedOrderId(order.id)
       setSelectedOrder(order)
@@ -452,14 +512,25 @@ function AppContent({
       await refreshCustomerState()
     } catch (reason: unknown) {
       if (!isCurrent()) return
-      setCartError(committed
+      if (reason instanceof ApiRequestError && reason.code === 'checkout_not_created') {
+        pendingCheckout.current = null
+        setCheckoutUncertain(false)
+        try { sessionStorage.removeItem('prepwise-checkout') } catch { /* Optional storage. */ }
+      } else if (submitted && !committed) setCheckoutUncertain(true)
+      const message = committed
         ? t('Your order was placed, but order history could not be refreshed.')
         : reason instanceof ApiRequestError && reason.status === 409
           ? t('Check your cart and choose a valid pickup time.')
-          : customerError(reason, 'We could not confirm checkout. Check your cart and upcoming orders before trying again.'))
+          : customerError(reason, 'We could not confirm checkout. Check your cart and upcoming orders before trying again.')
       if (!committed) await refreshCustomerState()
+      if (isCurrent()) setCartError(message)
     } finally {
-      if (sessionRef.current.token === expected.token) { cartWriteBusy.current = false; setIsCheckingOut(false) }
+      if (sessionRef.current.token === expected.token) {
+        cartVersion.current += 1; ordersVersion.current += 1
+        cartWriteBusy.current = false; setIsCheckingOut(false)
+        if (pendingCheckout.current && submitted && !committed) setCheckoutUncertain(true)
+        if (sessionRef.current.language !== expected.language) void latestRefresh.current()
+      }
     }
   }
 
@@ -470,23 +541,34 @@ function AppContent({
   }
 
   async function cancelSelectedOrder() {
-    if (!accessToken || !selectedOrder?.can_cancel || isCancelling) return
+    if (!accessToken || !selectedOrder || !canCancelOrder(selectedOrder, Date.now()) || isCancelling) return
     const orderId = selectedOrder.id
     if (!window.confirm(t('Cancel this order? This cannot be undone.'))) return
     const expected = { token: accessToken, language }
     setIsCancelling(true)
     ordersVersion.current += 1
+    detailVersion.current += 1
     setOrderDetailError(null)
     try {
       const cancelled = await cancelOrder(accessToken, orderId, language)
-      if (sessionRef.current.token !== expected.token || sessionRef.current.language !== expected.language) return
+      if (sessionRef.current.token !== expected.token) return
       setSelectedOrderId(null)
       setSelectedOrder(null)
+      if (sessionRef.current.language !== expected.language) return
       setOrders((previous) => previous?.map((order) => order.id === orderId ? cancelled : order) ?? [cancelled])
     } catch (reason: unknown) {
-      if (sessionRef.current.token === expected.token && sessionRef.current.language === expected.language) setOrderDetailError(customerError(reason, 'This order could not be cancelled. Refresh the orders and check the cancellation deadline.'))
+      await refreshCustomerState()
+      if (sessionRef.current.token === expected.token && sessionRef.current.language === expected.language) {
+        setSelectedOrderId(null); setSelectedOrder(null)
+        setOrdersError(customerError(reason, 'This order could not be cancelled. Refresh the orders and check the cancellation deadline.'))
+      }
     } finally {
-      if (sessionRef.current.token === expected.token) setIsCancelling(false)
+      if (sessionRef.current.token === expected.token) {
+        ordersVersion.current += 1
+        detailVersion.current += 1
+        setIsCancelling(false)
+        if (sessionRef.current.language !== expected.language) void latestRefresh.current()
+      }
     }
   }
 
@@ -535,12 +617,16 @@ function AppContent({
       <section className="hero">
         <p className="eyebrow">{t(isHistoryRoute ? 'Your account' : 'Pickup meals in Oslo')}</p>
         <h1>{t(isHistoryRoute ? 'Your previous orders' : 'Ready meals, without the guesswork.')}</h1>
-        <p className="summary">{t(isHistoryRoute ? 'Completed and cancelled orders. Active orders are shown above the meal menu.' : 'Pick balanced meals with clear nutrition and collect them from a convenient location in Oslo.')}</p>
+        <p className="summary">{t(isHistoryRoute ? 'Completed, cancelled and past pickup windows. Upcoming orders are shown above the meal menu.' : 'Pick balanced meals with clear nutrition and collect them from a convenient location in Oslo.')}</p>
       </section>
 
       <AssistantPanel key={currentUser?.id ?? (accessToken ? 'signed-in' : 'signed-out')} accessToken={accessToken} userId={currentUser?.id ?? null} onStateChange={refreshCustomerState} />
 
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)}>
+      {checkoutUncertain && pendingCheckout.current && <div role="alert"><p>{t('The previous checkout outcome is unknown. Check your orders or retry the same checkout safely.')}</p><button type="button" disabled={isCheckingOut || Boolean(cartMutationKey)} onClick={() => {
+        const purchase = pendingCheckout.current?.purchase
+        if (purchase) void checkout({ groupId: purchase.group_id, location: purchase.pickup_location_id, date: purchase.pickup_date, slot: purchase.pickup_slot })
+      }}>{t('Check previous checkout')}</button></div>}
       {accessToken ? (
         <GroupedCart
           key={currentUser?.id ?? accessToken}
@@ -563,7 +649,8 @@ function AppContent({
       {isHistoryRoute && !accessToken && <p>{t('Sign in to view your orders.')}</p>}
       {accessToken && isHistoryRoute && (
         <OrdersPanel
-          orders={orders?.filter((order) => order.status === 'completed' || order.status === 'cancelled') ?? null}
+          orders={orders?.filter((order) => !isUpcomingOrder(order, now)) ?? null}
+          now={now}
           error={ordersError}
           selectedOrder={selectedOrder}
           selectedOrderId={selectedOrderId}
@@ -575,8 +662,8 @@ function AppContent({
         />
       )}
       {accessToken && !isHistoryRoute && <section className="upcoming-orders">
-        <button className="upcoming-toggle" type="button" aria-expanded={upcomingOpen} aria-controls="upcoming-orders-content" onClick={() => setUpcomingOpen((open) => !open)}>{t('Upcoming orders')} ({orders?.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length ?? 0}) <span aria-hidden="true">{upcomingOpen ? '−' : '+'}</span></button>
-        {upcomingOpen && <div id="upcoming-orders-content"><OrdersPanel title="Upcoming orders" orders={orders?.filter((order) => order.status !== 'completed' && order.status !== 'cancelled') ?? null} error={ordersError} selectedOrder={selectedOrder} selectedOrderId={selectedOrderId} detailError={orderDetailError} onOpenOrder={openOrder} onClose={() => { setSelectedOrderId(null); setSelectedOrder(null); setOrderDetailError(null) }} onCancel={cancelSelectedOrder} cancelling={isCancelling} /></div>}
+        <button className="upcoming-toggle" type="button" aria-expanded={upcomingOpen} aria-controls="upcoming-orders-content" onClick={() => { if (!upcomingOpen) void refreshCustomerState(); setUpcomingOpen((open) => !open) }}>{t('Upcoming orders')} ({orders?.filter((order) => isUpcomingOrder(order, now)).length ?? 0}) <span aria-hidden="true">{upcomingOpen ? '−' : '+'}</span></button>
+        {upcomingOpen && <div id="upcoming-orders-content"><OrdersPanel now={now} title="Upcoming orders" orders={orders?.filter((order) => isUpcomingOrder(order, now)) ?? null} error={ordersError} selectedOrder={selectedOrder} selectedOrderId={selectedOrderId} detailError={orderDetailError} onOpenOrder={openOrder} onClose={() => { setSelectedOrderId(null); setSelectedOrder(null); setOrderDetailError(null) }} onCancel={cancelSelectedOrder} cancelling={isCancelling} /></div>}
       </section>}
       {!isHistoryRoute && <>
       <section className="catalogue" aria-labelledby="catalogue-heading">
@@ -860,6 +947,7 @@ function MealDetailPanel({
 
 
 interface OrdersPanelProps {
+  now: number
   title?: string
   orders: OrderSummary[] | null
   error: string | null
@@ -873,6 +961,7 @@ interface OrdersPanelProps {
 }
 
 function OrdersPanel({
+  now,
   title = 'Order history',
   orders,
   error,
@@ -916,6 +1005,7 @@ function OrdersPanel({
                 </span>
                 <h3>{order.pickup_location_name}</h3>
                 <p>{formatPickup(order.pickup_start_at, order.pickup_end_at, language)}</p>
+                {!isUpcomingOrder(order, now) && order.status !== 'completed' && order.status !== 'cancelled' && <p>{t('Pickup time has passed — collection is not confirmed.')}</p>}
               </div>
               <strong>{formatNok(order.total_nok, language)}</strong>
               <button type="button" aria-expanded={selectedOrderId === order.id} disabled={cancelling} onClick={() => void onOpenOrder(order.id)}>{selectedOrderId === order.id ? t('Close order') : t('View order')}</button>
@@ -929,8 +1019,8 @@ function OrdersPanel({
           {detailError}
         </div>
       )}
-      {selectedOrderId && !selectedOrder && !detailError && <p role="status">{t('Loading order details…')}</p>}
-      {selectedOrder && (
+      {selectedOrderId && orders?.some((order) => order.id === selectedOrderId) && !selectedOrder && !detailError && <p role="status">{t('Loading order details…')}</p>}
+      {selectedOrder && orders?.some((order) => order.id === selectedOrder.id) && (
         <article className="order-detail" aria-labelledby="order-detail-heading">
           <div className="order-detail__heading">
             <button className="close-button" type="button" onClick={onClose}>{t('Close order')}</button>
@@ -966,7 +1056,7 @@ function OrdersPanel({
           </div>
           {selectedOrder.status !== 'completed' && selectedOrder.status !== 'cancelled' && <>
             <p className="checkout-note">{t('To change pickup after ordering, cancel and place a new order. Cancellation is only possible before the pickup day (Oslo time).')}</p>
-            {selectedOrder.can_cancel && <button type="button" className="cancel-order" disabled={cancelling} onClick={() => void onCancel()}>{cancelling ? t('Cancelling…') : t('Cancel order')}</button>}
+            {canCancelOrder(selectedOrder, now) && <button type="button" className="cancel-order" disabled={cancelling} onClick={() => void onCancel()}>{cancelling ? t('Cancelling…') : t('Cancel order')}</button>}
           </>}
         </article>
       )}

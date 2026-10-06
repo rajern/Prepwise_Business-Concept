@@ -33,5 +33,7 @@ No. Orders are currently available for pickup only.
 
 ## Where can I see my orders?
 
-Signed-in customers see upcoming active orders above the meal menu. The Order history link
-in the top navigation shows completed/cancelled orders. Order details can be opened and closed.
+Signed-in customers see upcoming orders above the meal menu until the pickup window ends.
+The Order history link in the top navigation shows completed, cancelled and past-pickup orders.
+A past pickup window does not automatically mark an order collected or completed.
+Order details can be opened and closed.

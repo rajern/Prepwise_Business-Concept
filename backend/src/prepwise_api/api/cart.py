@@ -13,7 +13,7 @@ from prepwise_api.schemas import (
     CartItemQuantityUpdate,
     CartResponse,
 )
-from prepwise_api.schemas.cart import CartGroupWrite
+from prepwise_api.schemas.cart import CartGroupUpdate, CartGroupWrite
 from prepwise_api.services import ApplicationServiceError
 from prepwise_api.services.cart import (
     add_user_cart_item,
@@ -76,6 +76,9 @@ def change_cart_item_quantity(
             payload.quantity,
             group_id=payload.group_id,
             move_group="group_id" in payload.model_fields_set,
+            expected_quantity=payload.expected_quantity,
+            expected_group_id=payload.expected_group_id,
+            check_expected_state=True,
             lang=lang,
         )
     except ApplicationServiceError as error:
@@ -98,7 +101,7 @@ def create_cart_group(
 @router.patch("/groups/{group_id}", response_model=CartResponse)
 def update_cart_group(
     group_id: UUID,
-    payload: CartGroupWrite,
+    payload: CartGroupUpdate,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[Session, Depends(get_session)],
     lang: Language = "no",

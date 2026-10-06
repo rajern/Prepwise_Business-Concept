@@ -1,6 +1,7 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
 import type { Language } from '../i18n'
+import { authenticatedFetch } from '../auth/authenticatedFetch'
 
 export interface CartMeal {
   id: string
@@ -27,6 +28,7 @@ export interface Cart {
 
 export interface CartGroup {
   id: string
+  version: string
   pickup_location_id: string | null
   pickup_date: string | null
   pickup_slot: string | null
@@ -35,6 +37,7 @@ export interface CartGroup {
   total_nok: string
 }
 export interface GroupSelection {
+  expected_version?: string
   pickup_location_id?: string | null
   pickup_date?: string | null
   pickup_slot?: string | null
@@ -46,7 +49,7 @@ export async function saveCartGroup(token: string, groupId: string, selection: G
   return cartRequest(`/api/cart/groups/${groupId}?lang=${language}`, token, { method: 'PATCH', body: JSON.stringify(selection) })
 }
 export async function deleteCartGroup(token: string, groupId: string): Promise<void> {
-  const response = await fetch(apiUrl(`/api/cart/groups/${groupId}`), { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  const response = await authenticatedFetch(apiUrl(`/api/cart/groups/${groupId}`), token, { method: 'DELETE' })
   if (!response.ok) throw await apiRequestError(response)
 }
 
@@ -76,10 +79,12 @@ export async function updateCartItem(
   quantity: number,
   language: Language = 'no',
   groupId?: string | null,
+  expectedQuantity?: number,
+  expectedGroupId?: string | null,
 ): Promise<Cart> {
   return cartRequest(`/api/cart/items/${itemId}?lang=${language}`, accessToken, {
     method: 'PATCH',
-    body: JSON.stringify({ quantity, ...(groupId !== undefined ? { group_id: groupId } : {}) }),
+    body: JSON.stringify({ quantity, expected_quantity: expectedQuantity, expected_group_id: expectedGroupId, ...(groupId !== undefined ? { group_id: groupId } : {}) }),
   })
 }
 
@@ -87,7 +92,7 @@ export async function removeCartItem(
   accessToken: string,
   itemId: string,
 ): Promise<void> {
-  const response = await fetch(apiUrl(`/api/cart/items/${itemId}`), {
+  const response = await authenticatedFetch(apiUrl(`/api/cart/items/${itemId}`), accessToken, {
     method: 'DELETE',
     headers: { Authorization: `Bearer ${accessToken}` },
   })
@@ -101,7 +106,7 @@ async function cartRequest(
   accessToken: string,
   init: RequestInit,
 ): Promise<Cart> {
-  const response = await fetch(apiUrl(path), {
+  const response = await authenticatedFetch(apiUrl(path), accessToken, {
     ...init,
     headers: {
       Accept: 'application/json',

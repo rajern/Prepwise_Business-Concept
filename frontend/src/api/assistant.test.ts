@@ -2,7 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest'
 import { sendAssistantMessage, type AssistantEvent } from './assistant'
 import { ApiRequestError } from './errors'
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 
 function streamResponse(events: unknown[], splitBytes = false) {
   const bytes = new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\r\n\r\n`).join(''))
@@ -16,6 +16,21 @@ function streamResponse(events: unknown[], splitBytes = false) {
 }
 
 describe('assistant stream transport', () => {
+  it('preserves mutation/error references and prevents unbounded wait on a stalled stream', async () => {
+    vi.useFakeTimers()
+    const events: AssistantEvent[] = []
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(streamResponse([
+      { type: 'mutation', mutation_status: 'unknown', request_id: 'correlation' },
+      { type: 'error', status: 503, code: 'assistant_outcome_unknown', request_id: 'correlation', mutation_status: 'unknown', retry_safe: false },
+    ])))
+    await expect(sendAssistantMessage('token', 'Add', undefined, 'en', [], (event) => events.push(event), 'key')).rejects.toMatchObject({ code: 'assistant_outcome_unknown', requestId: 'correlation', mutationStatus: 'unknown', retrySafe: false })
+    expect(events).toEqual([{ type: 'mutation', mutation_status: 'unknown', request_id: 'correlation' }])
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream(), { headers: { 'Content-Type': 'text/event-stream' } })))
+    const pending = sendAssistantMessage('token', 'Add', undefined, 'en', [], () => undefined)
+    const rejected = expect(pending).rejects.toMatchObject({ name: 'TimeoutError' })
+    await vi.advanceTimersByTimeAsync(60000)
+    await rejected
+  })
   it('accepts the compatible JSON recovery endpoint without retrying a message', async () => {
     const reply = { reply: 'Bekreftet', model: 'offline', response_id: 'recovery' }
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(reply), {

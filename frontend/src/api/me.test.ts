@@ -21,11 +21,11 @@ describe('fetchCurrentUser', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await expect(fetchCurrentUser('access-token')).resolves.toEqual(user)
-    expect(fetchMock).toHaveBeenCalledWith('/api/me', {
+    expect(fetchMock).toHaveBeenCalledWith('/api/me', expect.objectContaining({
       headers: {
         Accept: 'application/json',
         Authorization: 'Bearer access-token',
       },
-    })
+    }))
   })
 })

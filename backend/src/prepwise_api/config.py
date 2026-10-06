@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     openai_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
     openai_max_retries: int = Field(default=1, ge=0, le=1)
     assistant_enabled: bool = True
+    assistant_streaming_enabled: bool = False
     assistant_messages_per_10_minutes: int = Field(default=15, ge=1, le=15)
     assistant_messages_per_user_day: int = Field(default=45, ge=1, le=45)
     assistant_messages_per_day: int = Field(default=100, ge=1, le=100)

@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from typing import cast
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -90,13 +91,20 @@ def _create_customer_order(client: TestClient, engine: Engine) -> dict[str, obje
         json={"meal_id": str(meal.id), "quantity": 1},
     )
     assert cart_response.status_code == 201
+    selection = {
+        "pickup_location_id": str(location.id),
+        "pickup_date": client.get("/api/pickup-locations/options").json()["days"][0]["date"],
+        "pickup_slot": "16-18",
+    }
+    review = client.post("/api/orders/review", headers=_headers(), json=selection)
+    assert review.status_code == 200
     order_response = client.post(
         "/api/orders",
         headers=_headers(),
         json={
-            "pickup_location_id": str(location.id),
-            "pickup_date": client.get("/api/pickup-locations/options").json()["days"][0]["date"],
-            "pickup_slot": "16-18",
+            **selection,
+            "review_fingerprint": review.json()["review_fingerprint"],
+            "idempotency_key": str(uuid4()),
         },
     )
     assert order_response.status_code == 201
@@ -155,11 +163,13 @@ def test_admin_can_create_edit_and_deactivate_pickup_locations(
             "pickup_location_id": created["id"],
             "pickup_date": client.get("/api/pickup-locations/options").json()["days"][0]["date"],
             "pickup_slot": "16-18",
+            "review_fingerprint": "0" * 64,
+            "idempotency_key": str(uuid4()),
         },
     )
     assert checkout_response.status_code == 409
     assert checkout_response.json()["detail"] == "Pickup location is unavailable"
-    assert checkout_response.json()["code"] == "conflict"
+    assert checkout_response.json()["code"] == "checkout_not_created"
 
 
 def test_pickup_location_admin_validates_input_and_duplicate_names(

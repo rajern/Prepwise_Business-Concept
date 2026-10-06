@@ -1,5 +1,6 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
+import { authenticatedFetch } from '../auth/authenticatedFetch'
 
 export interface AdminPickupLocation {
   id: string
@@ -57,7 +58,7 @@ async function adminPickupRequest<T>(
   accessToken: string,
   init: RequestInit,
 ): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await authenticatedFetch(apiUrl(path), accessToken, {
     ...init,
     headers: {
       Accept: 'application/json',

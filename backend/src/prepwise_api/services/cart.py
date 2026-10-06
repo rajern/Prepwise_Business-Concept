@@ -1,3 +1,5 @@
+import hashlib
+import json
 from decimal import Decimal
 from typing import cast
 from uuid import UUID
@@ -46,6 +48,9 @@ def write_user_cart_group(
 ) -> CartResponse:
     lock_user_cart(session, user_id)
     group = owned_cart_group(session, user_id, group_id) if group_id else CartGroup(user_id=user_id)
+    if group_id and payload.expected_version is not None:
+        if _group_version(group) != payload.expected_version:
+            raise ApplicationConflictError("Pickup group changed; reload it before updating")
     fields = payload.model_fields_set
     location_id = (
         payload.pickup_location_id if "pickup_location_id" in fields else group.pickup_location_id
@@ -118,6 +123,7 @@ def get_user_cart(session: Session, user_id: UUID, *, lang: Language = "no") -> 
         response_groups.append(
             CartGroupResponse(
                 id=group.id,
+                version=_group_version(group),
                 pickup_location_id=group.pickup_location_id,
                 pickup_date=group.pickup_date,
                 pickup_slot=cast(PickupSlot | None, group.pickup_slot),
@@ -189,6 +195,9 @@ def set_user_cart_item_quantity(
     *,
     group_id: UUID | None = None,
     move_group: bool = False,
+    expected_quantity: int | None = None,
+    expected_group_id: UUID | None = None,
+    check_expected_state: bool = False,
     lang: Language = "no",
 ) -> CartResponse:
     lock_user_cart(session, user_id)
@@ -203,6 +212,10 @@ def set_user_cart_item_quantity(
     )
     if item is None:
         raise ApplicationNotFoundError("Cart item not found")
+    if check_expected_state and (
+        item.quantity != expected_quantity or item.group_id != expected_group_id
+    ):
+        raise ApplicationConflictError("Cart item changed; reload the cart before updating")
     if quantity > item.quantity and not item.meal.available:
         raise ApplicationConflictError("Unavailable meals cannot be increased in the cart")
 
@@ -230,6 +243,20 @@ def set_user_cart_item_quantity(
         item.quantity = quantity
     session.commit()
     return get_user_cart(session, user_id, lang=lang)
+
+
+def _group_version(group: CartGroup) -> str:
+    """Version only the pickup selection, independently of line quantity changes."""
+    payload = {
+        "id": str(group.id),
+        "user_id": str(group.user_id),
+        "pickup_location_id": str(group.pickup_location_id) if group.pickup_location_id else None,
+        "pickup_date": group.pickup_date.isoformat() if group.pickup_date else None,
+        "pickup_slot": group.pickup_slot,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 def remove_user_cart_item(

@@ -8,6 +8,9 @@ from prepwise_api.schemas.assistant_tools import (
     SearchMealsToolArguments,
 )
 from prepwise_api.schemas.cart import (
+    CartGroupResponse,
+    CartGroupUpdate,
+    CartGroupWrite,
     CartItemCreate,
     CartItemQuantityUpdate,
     CartItemResponse,
@@ -26,6 +29,8 @@ from prepwise_api.schemas.order import (
     OrderCreate,
     OrderDetailResponse,
     OrderItemResponse,
+    OrderReviewRequest,
+    OrderReviewResponse,
     OrderStatusUpdate,
     OrderSummaryResponse,
 )
@@ -46,6 +51,9 @@ __all__ = [
     "AdminOrderDetailResponse",
     "AdminOrderSummaryResponse",
     "CartItemCreate",
+    "CartGroupResponse",
+    "CartGroupUpdate",
+    "CartGroupWrite",
     "CartItemQuantityUpdate",
     "CartItemResponse",
     "CartMealResponse",
@@ -59,6 +67,8 @@ __all__ = [
     "OrderCreate",
     "OrderDetailResponse",
     "OrderItemResponse",
+    "OrderReviewRequest",
+    "OrderReviewResponse",
     "OrderStatusUpdate",
     "OrderSummaryResponse",
     "PickupLocationAdminResponse",

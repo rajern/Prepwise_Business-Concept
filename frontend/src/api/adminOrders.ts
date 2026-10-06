@@ -1,5 +1,6 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
+import { authenticatedFetch } from '../auth/authenticatedFetch'
 import type { OrderDetail, OrderStatus, OrderSummary } from './orders'
 
 export interface AdminOrderSummary extends OrderSummary {
@@ -45,7 +46,7 @@ async function adminOrderRequest<T>(
   accessToken: string,
   init: RequestInit,
 ): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await authenticatedFetch(apiUrl(path), accessToken, {
     ...init,
     headers: {
       Accept: 'application/json',

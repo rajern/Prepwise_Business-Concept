@@ -25,6 +25,7 @@ class CartItemResponse(BaseModel):
 
 class CartGroupResponse(BaseModel):
     id: UUID
+    version: str
     pickup_location_id: UUID | None
     pickup_date: date | None
     pickup_slot: PickupSlot | None
@@ -38,6 +39,11 @@ class CartGroupWrite(BaseModel):
     pickup_location_id: UUID | None = None
     pickup_date: date | None = None
     pickup_slot: PickupSlot | None = None
+    expected_version: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class CartGroupUpdate(CartGroupWrite):
+    expected_version: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class CartResponse(BaseModel):
@@ -54,5 +60,9 @@ class CartItemCreate(BaseModel):
 
 
 class CartItemQuantityUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     quantity: int = Field(ge=1, le=99)
     group_id: UUID | None = None
+    expected_quantity: int = Field(ge=1, le=99)
+    expected_group_id: UUID | None

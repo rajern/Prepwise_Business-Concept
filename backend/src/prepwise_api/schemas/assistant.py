@@ -1,4 +1,5 @@
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
@@ -21,6 +22,7 @@ class AssistantMessageRequest(BaseModel):
     message: AssistantMessage
     lang: Literal["no", "en"] = "no"
     history: list[AssistantHistoryMessage] = Field(default_factory=list, max_length=10)
+    idempotency_key: UUID | None = None
 
     @model_validator(mode="after")
     def bound_history(self) -> "AssistantMessageRequest":

@@ -152,6 +152,23 @@ const norwegian: Record<string, string> = {
   'You have reached the chat limit. Please try again later.': 'Du har nådd grensen for chatten. Prøv igjen senere.',
   'A message is already being processed. Please wait.': 'En melding behandles allerede. Vent til den er ferdig.',
   'We could not refresh your cart and orders. Open the cart to try again.': 'Kunne ikke oppdatere handlekurven og bestillingene. Åpne handlekurven for å prøve igjen.',
+  'Your cart changed. Review the refreshed cart before trying again.': 'Handlekurven er endret. Se over den oppdaterte handlekurven før du prøver igjen.',
+  'Resolve the previous checkout before placing a different order.': 'Avklar den forrige bestillingen før du legger inn en ny.',
+  'Confirm this order?': 'Bekreft denne bestillingen?',
+  'Retry the previous checkout with the same request reference? No new order will be added if it already succeeded.': 'Prøv den forrige bestillingen igjen med samme referanse? Ingen ny ordre opprettes dersom den allerede lyktes.',
+  'The previous checkout outcome is unknown. Check your orders or retry the same checkout safely.': 'Utfallet av forrige bestilling er ukjent. Sjekk bestillingene dine eller prøv samme bestilling igjen trygt.',
+  'Check previous checkout': 'Kontroller forrige bestilling',
+  'Pickup time has passed — collection is not confirmed.': 'Hentetiden er passert – henting er ikke bekreftet.',
+  'The message outcome is uncertain. Check your cart and orders before doing anything again. Retrying this exact message keeps the same request reference.': 'Utfallet av meldingen er usikkert. Sjekk handlekurven og bestillingene før du gjør noe igjen. Gjentakelse av nøyaktig samme melding beholder samme referanse.',
+  'Outcome uncertain — not a confirmed action': 'Usikkert utfall – ikke en bekreftet handling',
+  'Message failed': 'Meldingen feilet',
+  'Changes were applied. Check your cart and orders; do not repeat the request.': 'Endringer er gjennomført. Sjekk handlekurven og bestillingene; ikke gjenta forespørselen.',
+  'Changes applied — check your cart and orders': 'Endringer gjennomført – sjekk handlekurven og bestillingene',
+  'Updating your cart…': 'Oppdaterer handlekurven…',
+  'Reference': 'Referanse',
+  'Awaiting confirmation': 'Venter på bekreftelse',
+  'This message was already processed. Send a new message if you need more help.': 'Denne meldingen er allerede behandlet. Send en ny melding hvis du trenger mer hjelp.',
+  'Completed, cancelled and past pickup windows. Upcoming orders are shown above the meal menu.': 'Fullførte, kansellerte og bestillinger med passert hentetid. Kommende bestillinger vises over menyen.',
 }
 
 interface LanguageContextValue {

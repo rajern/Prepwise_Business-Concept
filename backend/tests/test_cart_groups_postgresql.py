@@ -15,8 +15,13 @@ from sqlalchemy.orm import Session
 from prepwise_api.models import Base, CartItem, Meal, Order, OrderStatus, PickupLocation, User
 from prepwise_api.schemas.cart import CartGroupWrite
 from prepwise_api.services import ApplicationConflictError
-from prepwise_api.services.cart import add_user_cart_item, get_user_cart, write_user_cart_group
-from prepwise_api.services.orders import cancel_user_order, create_user_order
+from prepwise_api.services.cart import (
+    add_user_cart_item,
+    get_user_cart,
+    set_user_cart_item_quantity,
+    write_user_cart_group,
+)
+from prepwise_api.services.orders import cancel_user_order, create_user_order, review_user_order
 from prepwise_api.services.pickup_schedule import list_pickup_options
 
 
@@ -166,3 +171,71 @@ def test_cancellation_refreshes_admin_completed_status(
         assert pending.result(timeout=10) is False
     with Session(engine) as session:
         assert session.get(Order, order_id).status == OrderStatus.COMPLETED  # type: ignore[union-attr]
+
+
+def test_concurrent_expected_quantity_updates_only_one_wins(
+    group_database: tuple[Engine, UUID, UUID, UUID],
+) -> None:
+    engine, user_id, meal_id, _ = group_database
+    with Session(engine) as session:
+        item_id = add_user_cart_item(session, user_id, meal_id, 1).items[0].id
+    barrier = Barrier(2)
+
+    def change(_: int) -> bool:
+        with Session(engine) as session:
+            stale = session.get(CartItem, item_id)
+            assert stale is not None and stale.quantity == 1
+            barrier.wait(timeout=10)
+            try:
+                set_user_cart_item_quantity(
+                    session,
+                    user_id,
+                    item_id,
+                    2,
+                    expected_quantity=1,
+                    expected_group_id=None,
+                    check_expected_state=True,
+                )
+            except ApplicationConflictError:
+                session.rollback()
+                return False
+            return True
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        assert sum(pool.map(change, range(2))) == 1
+    with Session(engine) as session:
+        assert get_user_cart(session, user_id).total_quantity == 2
+
+
+def test_concurrent_idempotent_checkout_returns_same_order_for_both_requests(
+    group_database: tuple[Engine, UUID, UUID, UUID],
+) -> None:
+    engine, user_id, meal_id, location_id = group_database
+    day = list_pickup_options().days[0]
+    with Session(engine) as session:
+        add_user_cart_item(session, user_id, meal_id, 1)
+        review = review_user_order(
+            session, user_id, location_id, pickup_date=day.date, pickup_slot="16-18"
+        )
+    barrier = Barrier(2)
+    key = uuid4()
+
+    def checkout(_: int) -> UUID:
+        with Session(engine) as session:
+            barrier.wait(timeout=10)
+            return create_user_order(
+                session,
+                user_id,
+                location_id,
+                pickup_date=day.date,
+                pickup_slot="16-18",
+                review_fingerprint=review.review_fingerprint,
+                idempotency_key=key,
+            ).id
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(checkout, range(2)))
+    assert results[0] == results[1]
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(Order)) == 1
+        assert get_user_cart(session, user_id).total_quantity == 0

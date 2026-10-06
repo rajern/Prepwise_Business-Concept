@@ -32,7 +32,13 @@ class Order(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("total_nok >= 0", name="total_non_negative"),
         CheckConstraint("pickup_end_at > pickup_start_at", name="pickup_window_valid"),
+        CheckConstraint(
+            "(checkout_request_key IS NULL AND checkout_request_hash IS NULL) OR "
+            "(checkout_request_key IS NOT NULL AND checkout_request_hash IS NOT NULL)",
+            name="checkout_request_pair",
+        ),
         Index("ix_orders_user_created_at", "user_id", "created_at"),
+        UniqueConstraint("user_id", "checkout_request_key", name="uq_orders_user_checkout_request"),
     )
 
     user_id: Mapped[UUID] = mapped_column(
@@ -59,6 +65,8 @@ class Order(UuidPrimaryKeyMixin, TimestampMixin, Base):
     pickup_location_name: Mapped[str] = mapped_column(String(200))
     pickup_location_address: Mapped[str] = mapped_column(String(400))
     total_nok: Mapped[Decimal] = mapped_column(Numeric(12, 2))
+    checkout_request_key: Mapped[UUID | None] = mapped_column(Uuid)
+    checkout_request_hash: Mapped[str | None] = mapped_column(String(64))
 
     user: Mapped[User] = relationship(back_populates="orders")
     pickup_location: Mapped[PickupLocation] = relationship(back_populates="orders")

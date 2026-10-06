@@ -82,6 +82,19 @@ function configureMsalContext(isAuthenticated: boolean) {
 }
 
 describe('AuthControls', () => {
+  it('clears API and customer state when MSAL removes the account externally', async () => {
+    configureMsalContext(true)
+    const onAccessTokenChange = vi.fn()
+    const onCurrentUserChange = vi.fn()
+    const view = render(<AuthControls apiScope={apiScope} onAccessTokenChange={onAccessTokenChange} onCurrentUserChange={onCurrentUserChange} />)
+    await screen.findByText('Signed in')
+    expect(onAccessTokenChange).toHaveBeenLastCalledWith('not-a-real-token')
+    configureMsalContext(false)
+    view.rerender(<AuthControls apiScope={apiScope} onAccessTokenChange={onAccessTokenChange} onCurrentUserChange={onCurrentUserChange} />)
+    expect(screen.getByRole('button', { name: 'Sign in or create account' })).toBeInTheDocument()
+    expect(onAccessTokenChange).toHaveBeenLastCalledWith(null)
+    expect(onCurrentUserChange).toHaveBeenLastCalledWith(null)
+  })
   it('starts the combined sign-in and sign-up flow with the API scope', () => {
     const { loginRedirect } = configureMsalContext(false)
 

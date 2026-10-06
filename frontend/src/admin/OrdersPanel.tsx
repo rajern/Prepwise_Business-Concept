@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   type AdminOrderDetail,
@@ -36,13 +36,17 @@ export function OrdersPanel({ accessToken }: OrdersPanelProps) {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [detailError, setDetailError] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
+  const detailSequence = useRef(0)
+  const detailController = useRef<AbortController | null>(null)
+  const currentToken = useRef(accessToken)
+  useEffect(() => { currentToken.current = accessToken; return () => { detailSequence.current += 1; detailController.current?.abort() } }, [accessToken])
 
   useEffect(() => {
     const controller = new AbortController()
     void fetchAdminOrders(accessToken, controller.signal)
-      .then(setOrders)
+      .then((value) => { if (!controller.signal.aborted) { setOrders(value); setLoadError(null) } })
       .catch((reason: unknown) => {
-        if (!(reason instanceof DOMException && reason.name === 'AbortError')) {
+        if (!controller.signal.aborted && !(reason instanceof DOMException && reason.name === 'AbortError')) {
           setLoadError(apiErrorMessage(reason, 'Orders could not be loaded.'))
         }
       })
@@ -50,11 +54,17 @@ export function OrdersPanel({ accessToken }: OrdersPanelProps) {
   }, [accessToken])
 
   async function inspectOrder(orderId: string) {
+    const sequence = ++detailSequence.current
+    detailController.current?.abort()
+    const controller = new AbortController()
+    detailController.current = controller
     setDetailError(null)
     setSelectedOrder(null)
     try {
-      setSelectedOrder(await fetchAdminOrder(accessToken, orderId))
+      const detail = await fetchAdminOrder(accessToken, orderId, controller.signal)
+      if (!controller.signal.aborted && sequence === detailSequence.current && currentToken.current === accessToken) setSelectedOrder(detail)
     } catch (reason: unknown) {
+      if (controller.signal.aborted || sequence !== detailSequence.current || currentToken.current !== accessToken) return
       setDetailError(
         apiErrorMessage(reason, 'The order details could not be loaded.'),
       )
@@ -70,21 +80,25 @@ export function OrdersPanel({ accessToken }: OrdersPanelProps) {
       return
     }
     setUpdating(true)
+    const sequence = ++detailSequence.current
+    detailController.current?.abort()
     setDetailError(null)
     try {
       const saved = await updateAdminOrderStatus(accessToken, selectedOrder.id, status)
-      setSelectedOrder(saved)
+      if (currentToken.current !== accessToken) return
+      if (sequence === detailSequence.current) setSelectedOrder(saved)
       setOrders((current) =>
         current?.map((order) =>
           order.id === saved.id ? { ...order, status: saved.status } : order,
         ) ?? null,
       )
     } catch (reason: unknown) {
+      if (currentToken.current !== accessToken || sequence !== detailSequence.current) return
       setDetailError(
         apiErrorMessage(reason, 'The order status could not be updated.'),
       )
     } finally {
-      setUpdating(false)
+      if (currentToken.current === accessToken) setUpdating(false)
     }
   }
 

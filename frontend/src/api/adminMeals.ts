@@ -1,5 +1,6 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
+import { authenticatedFetch } from '../auth/authenticatedFetch'
 import type { Allergen, MealDetail } from './meals'
 
 export interface AdminMeal extends MealDetail {
@@ -65,7 +66,7 @@ async function adminRequest<T>(
   accessToken: string,
   init: RequestInit,
 ): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await authenticatedFetch(apiUrl(path), accessToken, {
     ...init,
     headers: {
       Accept: 'application/json',

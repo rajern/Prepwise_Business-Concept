@@ -30,7 +30,7 @@ export function GroupedCart(props: Props) {
     <p className="checkout-note">{t('Each pickup group becomes a separate order. You can choose different days and locations.')}</p>
     <button className="close-button" type="button" disabled={props.busy || !cart} onClick={() => void props.onCreateGroup()}>{t('Add pickup group')}</button>
     {unassigned.length > 0 && cart && <PickupGroup key="unassigned" {...props} group={null} items={unassigned} index={0} groups={groups} />}
-    {groups.map((group, index) => <PickupGroup key={group.id} {...props} group={group} items={group.items} index={index + 1} groups={groups} />)}
+    {groups.map((group, index) => <PickupGroup key={`${group.id}:${group.version}:${group.pickup_location_id}:${group.pickup_date}:${group.pickup_slot}`} {...props} group={group} items={group.items} index={index + 1} groups={groups} />)}
   </section>
 }
 
@@ -50,7 +50,7 @@ function PickupGroup({ group, items, index, groups, ...props }: Props & {group: 
     setDraft({ date, slot: value })
     if (group) {
       await props.onSaveGroup(group.id, { pickup_date: value ? date : null, pickup_slot: value || null })
-      // Retain draft on failure. The checkout save revalidates it authoritatively.
+      // A saved/new server version remounts this draft; stale local selections cannot mask it.
     }
   }
   return <section className="pickup-group" aria-labelledby={`group-${group?.id ?? 'unassigned'}`}>
@@ -77,7 +77,7 @@ function PickupGroup({ group, items, index, groups, ...props }: Props & {group: 
       }}><option value="">{t('Choose a pickup location')}</option>{location && !validLocation && <option value={location}>{t('Previous pickup location is unavailable')}</option>}{props.pickupLocations?.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name} — {candidate.address_line}, {candidate.postal_code} {candidate.city}</option>)}</select></label>
       <label className="pickup-field"><span>{t('Pickup date')}</span><select aria-label={t('Pickup date')} value={date} disabled={props.busy || !props.pickupOptions} onChange={(event) => {
         setDraft({ date: event.target.value, slot: '' })
-        if (group?.pickup_date) void props.onSaveGroup(group.id, { pickup_date: null, pickup_slot: null })
+        // Keep a date without a slot local; persist the pair only after a valid slot is chosen.
       }}><option value="">{t('Choose a pickup date')}</option>{date && !day && <option value={date}>{date} · {t('Choose a new pickup date')}</option>}{props.pickupOptions?.days.map((candidate) => <option key={candidate.date} value={candidate.date}>{new Intl.DateTimeFormat(language === 'no' ? 'nb-NO' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Oslo' }).format(new Date(`${candidate.date}T12:00:00Z`))}</option>)}</select></label>
       <label className="pickup-field"><span>{t('Pickup time')}</span><select aria-label={t('Pickup time')} value={slot} disabled={props.busy || !day} onChange={(event) => void changeSlot(event.target.value)}><option value="">{t('Choose a pickup time')}</option>{day?.slots.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.id.replace('-', ':00–')}:00</option>)}</select></label>
       <p className="checkout-note">{t('Pickup is available from tomorrow. All times are local to Oslo.')}</p>

@@ -1,6 +1,7 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
 import type { Language } from '../i18n'
+import { authenticatedFetch } from '../auth/authenticatedFetch'
 
 export type OrderStatus =
   | 'received'
@@ -34,6 +35,31 @@ export interface OrderDetail extends OrderSummary {
   items: OrderItem[]
 }
 
+export interface OrderSelection {
+  pickup_location_id: string
+  pickup_date: string
+  pickup_slot: string
+  group_id: string | null
+}
+export interface OrderReview {
+  review_fingerprint: string
+  items: OrderItem[]
+  total_quantity: number
+  total_nok: string
+  pickup_location_name: string
+  pickup_location_address: string
+  pickup_start_at: string
+  pickup_end_at: string
+}
+export interface OrderPurchase extends OrderSelection {
+  review_fingerprint: string
+  idempotency_key: string
+}
+
+export async function reviewOrder(accessToken: string, selection: OrderSelection, language: Language): Promise<OrderReview> {
+  return orderRequest(`/api/orders/review?lang=${language}`, accessToken, { method: 'POST', body: JSON.stringify(selection) })
+}
+
 export async function fetchOrders(
   accessToken: string,
   signal?: AbortSignal,
@@ -53,15 +79,12 @@ export async function fetchOrder(
 
 export async function createOrder(
   accessToken: string,
-  pickupLocationId: string,
-  pickupDate: string,
-  pickupSlot: string,
+  purchase: OrderPurchase,
   language: Language = 'no',
-  groupId?: string | null,
 ): Promise<OrderDetail> {
   return orderRequest(`/api/orders?lang=${language}`, accessToken, {
     method: 'POST',
-    body: JSON.stringify({ pickup_location_id: pickupLocationId, pickup_date: pickupDate, pickup_slot: pickupSlot, ...(groupId ? { group_id: groupId } : {}) }),
+    body: JSON.stringify(purchase),
   })
 }
 
@@ -74,7 +97,7 @@ async function orderRequest<T>(
   accessToken: string,
   init: RequestInit,
 ): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await authenticatedFetch(apiUrl(path), accessToken, {
     ...init,
     headers: {
       Accept: 'application/json',

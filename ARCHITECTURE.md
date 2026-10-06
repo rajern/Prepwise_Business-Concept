@@ -359,6 +359,50 @@ tokens, calls, writes and elapsed time limit admitted work. Scope refusal is pro
 authorization and consequential order confirmation are enforced by the application.
 See [agent security](./docs/AGENT_SECURITY.md) for precise boundaries and remaining gaps.
 
+### State consistency and request replay (2026-10-06, local repair)
+
+Customer item updates carry the last observed quantity and pickup group. Group selection
+updates carry a server-generated selection version. The backend compares these under the
+existing owner-scoped cart lock and rejects stale writes; the browser refreshes for review
+instead of silently replaying an absolute update.
+
+UI checkout first obtains an authoritative server review of the selected scope. Its fingerprint
+binds user, item IDs, quantities, bilingual names, prices, location/address and exact pickup
+window. Confirmation submits that fingerprint and a user-scoped UUID key. One transaction
+revalidates the reviewed state, snapshots the order and removes only the selected items.
+A repeated identical key returns the existing order before validating today's date or cart;
+changed input with the same key is rejected. Unassigned checkout no longer creates/moves a
+group in the browser. Existing assistant order confirmation retains its exact later-message
+phrase and expiry, now binding the same full snapshot.
+An uncertain checkout keeps its original receipt across auth/network failures. Only an explicit
+`checkout_not_created` rejection after locked key lookup proves absence and permits a fresh key;
+a generic 4xx after a lost response is not treated as that proof.
+
+Upcoming/history is a presentation classification: completed/cancelled orders and orders whose
+pickup window has ended appear in history. An elapsed window does not prove collection and
+does not silently change fulfillment status. The browser uses Oslo cancellation dates and
+refreshes clock-dependent state on time ticks, focus and visibility changes.
+
+Keyed assistant requests store only a canonical payload hash, owner/key, attempt fence, times
+and mutation status. Before any write tool, an independent transaction records an uncertain
+side effect; after success it records applied. Reusing that key cannot rerun possible writes.
+This is conservative replay protection, not atomic rollback, exactly-once execution, cached
+model replies or proof of user intent. A new key can still represent duplicate intent. Completed
+keys are rejected; only read-only failed/expired attempts may retry with a fenced new attempt.
+Quota rejection creates no new replay receipt. UI preserves failed attempts and
+excludes failed/partial text from confirmed history. JSON and SSE share the same guard.
+
+SDK output replay removes local parsed helpers while retaining actual Responses wire fields.
+Regression tests use the real AsyncOpenAI client with an offline HTTP/SSE transport. Protected
+browser requests silently acquire a current account-bound API token before sending; mutations
+are not automatically resubmitted after HTTP failures. Request sequence/session guards prevent
+late reads from replacing newer state, and a client deadline bounds waiting for chat output.
+
+These repairs require the additive `a7b8c9d0e1f2` migration, runtime replay-table grants and the
+matching frontend/API contracts. They are local only until separately authorized release gates
+pass. The old checkout API/client is not a compatible recovery baseline for the new mandatory
+review/CAS contract. Never downgrade populated replay receipts or improvise a database rollback.
+
 ### AI evals
 
 A fixed evaluation set should test important behaviours such as:

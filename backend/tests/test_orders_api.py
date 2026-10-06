@@ -1,8 +1,10 @@
 from collections.abc import Iterator
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
+from httpx2 import Response
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
@@ -70,6 +72,20 @@ def _pickup(client: TestClient) -> dict[str, str]:
     return {"pickup_date": day["date"], "pickup_slot": "16-18"}
 
 
+def _checkout(
+    client: TestClient, path: str, *, headers: dict[str, str], json: dict[str, object]
+) -> Response:
+    review = client.post(
+        path.replace("/api/orders", "/api/orders/review"), headers=headers, json=json
+    )
+    fingerprint = review.json().get("review_fingerprint", "0" * 64)
+    return client.post(
+        path,
+        headers=headers,
+        json={**json, "review_fingerprint": fingerprint, "idempotency_key": str(uuid4())},
+    )
+
+
 def _first_meal_and_location(engine: Engine) -> tuple[Meal, PickupLocation]:
     with Session(engine) as session:
         meal = session.scalar(select(Meal).order_by(Meal.name))
@@ -93,7 +109,8 @@ def test_checkout_creates_historical_order_and_clears_cart_atomically(
     )
     assert add_response.status_code == 201
 
-    checkout_response = client.post(
+    checkout_response = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={"pickup_location_id": str(location.id), **_pickup(client)},
@@ -139,7 +156,8 @@ def test_order_history_is_scoped_to_the_authenticated_user(
         headers=_headers(),
         json={"meal_id": str(meal.id), "quantity": 1},
     )
-    created = client.post(
+    created = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={"pickup_location_id": str(location.id), **_pickup(client)},
@@ -181,7 +199,8 @@ def test_failed_checkout_preserves_cart_and_creates_no_partial_order(
             persisted_meal.available = False
         session.commit()
 
-    response = client.post(
+    response = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={"pickup_location_id": str(location.id), **_pickup(client)},
@@ -200,14 +219,16 @@ def test_checkout_rejects_empty_cart_and_frontend_supplied_price(
     client, engine = client_and_engine
     _, location = _first_meal_and_location(engine)
 
-    empty_response = client.post(
+    empty_response = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={"pickup_location_id": str(location.id), **_pickup(client)},
     )
     assert empty_response.status_code == 409
 
-    untrusted_price_response = client.post(
+    untrusted_price_response = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={"pickup_location_id": str(location.id), "total_nok": "1.00", **_pickup(client)},
@@ -227,7 +248,8 @@ def test_checkout_requires_explicit_selection_and_preserves_cart_on_invalid_date
         "/api/orders", headers=_headers(), json={"pickup_location_id": str(location.id)}
     )
     assert missing.status_code == 422
-    invalid = client.post(
+    invalid = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={
@@ -253,7 +275,8 @@ def test_checkout_stores_selected_window_and_historical_translation(
     assert cart["items"][0]["meal"]["name"] == meal.name_en
     day = client.get("/api/pickup-locations/options").json()["days"][-1]
     slot = day["slots"][-1]
-    result = client.post(
+    result = _checkout(
+        client,
         "/api/orders?lang=en",
         headers=_headers(),
         json={
@@ -314,20 +337,24 @@ def test_group_checkout_consumes_only_selected_group_and_checks_saved_pickup(
     client.post(
         "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
     )
-    # Old clients/assistant cannot accidentally combine all dates.
-    assert client.post("/api/orders", headers=_headers(), json=pickup).status_code == 409
-    stale = client.post(
+    # Old clients fail closed without a reviewed snapshot and idempotency key.
+    assert client.post("/api/orders", headers=_headers(), json=pickup).status_code == 422
+    stale = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={**pickup, "pickup_slot": "16-18", "group_id": groups[0]["id"]},
     )
     assert stale.status_code == 409
-    other = client.post(
-        "/api/orders", headers=_headers("other-token"), json={**pickup, "group_id": groups[0]["id"]}
+    other = _checkout(
+        client,
+        "/api/orders",
+        headers=_headers("other-token"),
+        json={**pickup, "group_id": groups[0]["id"]},
     )
     assert other.status_code == 404
-    created = client.post(
-        "/api/orders", headers=_headers(), json={**pickup, "group_id": groups[0]["id"]}
+    created = _checkout(
+        client, "/api/orders", headers=_headers(), json={**pickup, "group_id": groups[0]["id"]}
     )
     assert created.status_code == 201
     assert len(created.json()["items"]) == 1
@@ -345,7 +372,8 @@ def test_customer_cancellation_preserves_history_and_is_terminal(
     client.post(
         "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
     )
-    order = client.post(
+    order = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={"pickup_location_id": str(location.id), **_pickup(client)},
@@ -375,7 +403,8 @@ def test_customer_cannot_cancel_on_pickup_day(client_and_engine: tuple[TestClien
     client.post(
         "/api/cart/items", headers=_headers(), json={"meal_id": str(meal.id), "quantity": 1}
     )
-    order = client.post(
+    order = _checkout(
+        client,
         "/api/orders",
         headers=_headers(),
         json={"pickup_location_id": str(location.id), **_pickup(client)},
@@ -454,7 +483,12 @@ def test_assistant_confirmation_cannot_ignore_new_pickup_groups(
     client.patch(
         f"/api/cart/items/{cart['items'][0]['id']}",
         headers=_headers(),
-        json={"quantity": 1, "group_id": group_id},
+        json={
+            "quantity": 1,
+            "group_id": group_id,
+            "expected_quantity": 1,
+            "expected_group_id": None,
+        },
     )
     with Session(engine) as session:
         with pytest.raises(ApplicationConflictError, match="separate pickup groups"):

@@ -1,5 +1,6 @@
 import { apiUrl } from './config'
 import { apiRequestError } from './errors'
+import { authenticatedFetch } from '../auth/authenticatedFetch'
 
 export interface CurrentUser {
   id: string
@@ -9,7 +10,7 @@ export interface CurrentUser {
 }
 
 export async function fetchCurrentUser(accessToken: string): Promise<CurrentUser> {
-  const response = await fetch(apiUrl('/api/me'), {
+  const response = await authenticatedFetch(apiUrl('/api/me'), accessToken, {
     headers: {
       Accept: 'application/json',
       Authorization: `Bearer ${accessToken}`,

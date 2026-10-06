@@ -1,5 +1,5 @@
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Integer, String, Text, UniqueConstraint
+from sqlalchemy import Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from prepwise_api.models.base import Base, TimestampMixin, UuidPrimaryKeyMixin
@@ -11,6 +11,12 @@ class KnowledgeChunk(UuidPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "knowledge_chunks"
     __table_args__ = (
         UniqueConstraint("source_path", "chunk_index", name="uq_knowledge_chunks_source_chunk"),
+        Index(
+            "ix_knowledge_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     source_path: Mapped[str] = mapped_column(String(500), nullable=False, index=True)

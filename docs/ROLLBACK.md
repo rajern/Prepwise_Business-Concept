@@ -5,6 +5,49 @@ delivery path. It does not install an automatic rollback controller or change pr
 It permits a new, ordinary Git revert commit only after every gate below is satisfied.
 An unavailable check is a failed gate, not permission to assume safety.
 
+## Architecture repair release (2026-10-06): compatible, narrow recovery
+
+The local `a7b8c9d0e1f2` revision adds durable chat replay receipts and checkout
+request keys. Matching clients require server reviews/CAS fields. The owner subsequently
+approved release validation/deployment and changed-chunk embeddings. The serving `281c8b4` and historical JSON
+recovery below are not validated recovery targets for these new contracts: reverting
+the replay-aware endpoint can allow a possible side effect to run again, and reverting
+the client can break checkout. Before a later release, validate a forward-compatible
+recovery artifact retaining the new schema, grants, keyed guards and mandatory review
+contracts. Do not use an old blind revert or remove replay receipts. The migration's
+downgrade refuses when receipts/keyed orders exist; that refusal is not a rollback plan.
+
+Knowledge-base source/index consistency also requires a separate preflight: the current
+published order guidance predates the new time-based presentation classification. No
+paid embedding/index call was included in the initial local repair approval; the later release
+approval covers the4 changed/new chunks (11 unchanged;15 total). Existing CI/deploy performs
+the migration/grants/index work. Do not push while a validated release gate remains unresolved.
+
+The new compatible recovery checkpoint retains the complete `a7b8c9d0e1f2` schema/grants,
+durable pre-write receipts/fencing, reviewed keyed checkout, CAS, frontend and revised KB.
+`assistant_streaming_enabled` defaults false only at that checkpoint; SSE-capable clients
+receive the already-supported JSON transport. Streaming activation is a separate contiguous
+commit changing only the default to true, its default regression and release evidence.
+The cloud has no explicit override of this setting. Reverting ONLY that activation commit
+can restore JSON transport without weakening replay/order safety or changing persisted state.
+Domain defects require a compatible forward fix; never revert the checkpoint/full feature batch.
+
+The locally built checkpoint image
+`sha256:f16cacdecedfeaccddb9f63b369d1470a994c5b0668a49ee9b17b591f02d1fb7`
+passed `scripts/recovery-image-drill.py` against the freshly migrated, explicitly named local
+test database: cancelled keyed-order replay, other-group/new-cart retention, authenticated
+JSON fallback and partial-write replay rejection. No provider call or production business write.
+This is an image-level synthetic compatibility drill, NOT a successful GitHub/Azure rollback.
+
+Before any recovery, repeat exact remote/queue/image/traffic, schema/grants and KB hash/model
+checks. Post-release KB must be a no-op (`scripts/release-readonly.py --expect-head a7b8c9d0e1f2
+--require-index-match`). Compare the full revert diff to the checkpoint: only the streaming
+default/default regression and release evidence may differ. Schema, domain, guards, grants,
+frontend, seed, SDK/dependencies, workflow and KB must be identical. Do not downgrade/delete
+receipt or order rows, re-enable an old privileged role or re-embed unchanged source.
+Use the ordinary revert/redeploy procedure below with the exact new checkpoint/activation
+SHAs, not historical baselines. A failed/mixed deploy or mismatch is a stop-and-inspect condition.
+
 ## Customer groups/cancellation release and compatible recovery (2026-10-01)
 
 The pending `f6a7b8c9d0e1` migration adds persistent cart groups and the `cancelled` order status.

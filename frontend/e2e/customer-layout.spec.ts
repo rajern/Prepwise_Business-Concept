@@ -2,11 +2,12 @@ import { expect, test } from '@playwright/test'
 
 // Browser-only UI evidence: every API response is mocked; no model/provider or production calls.
 test('customer dialogs, pickup groups and order sections work on desktop and mobile', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-01T10:00:00Z'))
   const meal = { id: 'meal-one', name: 'Kylling teriyaki med ris', description: 'Kylling med ris og brokkoli.', image_url: '/images/meals/chicken-teriyaki-v1.webp', price_nok: '129.00', calories: 585, protein_grams: '43', carbohydrate_grams: '68', fat_grams: '14', ingredients: ['Kylling', 'Ris', 'Brokkoli'], allergens: [{ code: 'soy', name: 'Soya' }], available: true }
   const location = { id: 'location-one', name: 'Prepwise Grünerløkka', address_line: 'Thorvald Meyers gate 35', postal_code: '0555', city: 'Oslo' }
   const groups = ['2026-10-02', '2026-10-03'].map((date, index) => {
     const id = `group-${index}`
-    return { id, pickup_location_id: location.id, pickup_date: date, pickup_slot: '16-18', items: [{ id: `item-${index}`, group_id: id, quantity: 1, line_total_nok: '129.00', meal }], total_quantity: 1, total_nok: '129.00' }
+    return { id, version: 'a'.repeat(64), pickup_location_id: location.id, pickup_date: date, pickup_slot: '16-18', items: [{ id: `item-${index}`, group_id: id, quantity: 1, line_total_nok: '129.00', meal }], total_quantity: 1, total_nok: '129.00' }
   })
   const order = (id: string, status: string) => ({ id, status, total_nok: '129.00', created_at: '2026-10-01T10:00:00Z', pickup_start_at: '2026-10-02T14:00:00Z', pickup_end_at: '2026-10-02T16:00:00Z', pickup_location_name: location.name, pickup_location_address: 'Thorvald Meyers gate 35, 0555 Oslo', can_cancel: status === 'received', cancellation_deadline: '2026-10-01T22:00:00Z', items: [{ meal_id: meal.id, meal_name: meal.name, quantity: 1, unit_price_nok: '129.00', line_total_nok: '129.00' }] })
   await page.route((url) => url.pathname.startsWith('/api/'), async (route) => {

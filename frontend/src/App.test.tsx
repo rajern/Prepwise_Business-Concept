@@ -43,6 +43,7 @@ const pickupLocation = {
 }
 
 beforeEach(() => {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-24T10:00:00Z'))
   localStorage.setItem('prepwise-language', 'en')
   sessionStorage.clear()
   Object.defineProperty(HTMLDialogElement.prototype, 'showModal', { configurable: true, value: function (this: HTMLDialogElement) { this.open = true } })
@@ -314,6 +315,9 @@ describe('App', () => {
         orderCreated = true
         return { ok: true, json: async () => order }
       }
+      if (path === '/api/orders/review' && init?.method === 'POST') {
+        return { ok: true, json: async () => ({ ...order, total_quantity: 1, review_fingerprint: 'a'.repeat(64) }) }
+      }
       if (path === '/api/orders' && !init?.method) {
         return {
           ok: true,
@@ -347,7 +351,7 @@ describe('App', () => {
       screen.getByRole('button', { name: 'Review and place order' }),
     )
 
-    expect(confirm).toHaveBeenCalledOnce()
+    await waitFor(() => expect(confirm).toHaveBeenCalledOnce())
     await screen.findByRole('button', { name: 'Open cart (0)' })
     expect(await screen.findByText(`1 × ${meal.name}`)).toBeInTheDocument()
     expect(screen.getAllByText('Received')).toHaveLength(2)

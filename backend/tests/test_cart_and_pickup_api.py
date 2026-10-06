@@ -101,7 +101,7 @@ def test_cart_crud_persists_and_calculates_authoritative_totals(
     update_response = client.patch(
         f"/api/cart/items/{item_id}",
         headers=headers,
-        json={"quantity": 3},
+        json={"quantity": 3, "expected_quantity": 2, "expected_group_id": None},
     )
     assert update_response.status_code == 200
     assert update_response.json()["total_quantity"] == 3
@@ -156,7 +156,7 @@ def test_cart_rejects_invalid_quantities_unavailable_meals_and_cross_user_access
     cross_user_response = client.patch(
         f"/api/cart/items/{item_id}",
         headers=other_headers,
-        json={"quantity": 2},
+        json={"quantity": 2, "expected_quantity": 1, "expected_group_id": None},
     )
     assert cross_user_response.status_code == 404
 
@@ -225,7 +225,12 @@ def test_groups_persist_pickup_and_isolate_duplicate_meals(
     moved = client.patch(
         f"/api/cart/items/{item['id']}",
         headers=headers,
-        json={"quantity": 2, "group_id": group_ids[1]},
+        json={
+            "quantity": 2,
+            "group_id": group_ids[1],
+            "expected_quantity": 2,
+            "expected_group_id": group_ids[0],
+        },
     )
     assert moved.status_code == 200
     assert len(moved.json()["items"]) == 1
@@ -234,11 +239,20 @@ def test_groups_persist_pickup_and_isolate_duplicate_meals(
     item = moved.json()["items"][0]
     # Omitted group_id retains assignment; explicit null removes assignment.
     retained = client.patch(
-        f"/api/cart/items/{item['id']}", headers=headers, json={"quantity": 3}
+        f"/api/cart/items/{item['id']}",
+        headers=headers,
+        json={"quantity": 3, "expected_quantity": 4, "expected_group_id": group_ids[1]},
     ).json()
     assert retained["items"][0]["group_id"] == group_ids[1]
     unassigned = client.patch(
-        f"/api/cart/items/{item['id']}", headers=headers, json={"quantity": 3, "group_id": None}
+        f"/api/cart/items/{item['id']}",
+        headers=headers,
+        json={
+            "quantity": 3,
+            "group_id": None,
+            "expected_quantity": 3,
+            "expected_group_id": group_ids[1],
+        },
     ).json()
     assert unassigned["items"][0]["group_id"] is None
 
@@ -249,9 +263,14 @@ def test_group_ownership_and_invalid_selection(
     client, _ = client_and_engine
     headers = {"Authorization": "Bearer valid-token"}
     other = {"Authorization": "Bearer other-token"}
-    group_id = client.post("/api/cart/groups", headers=headers, json={}).json()["groups"][0]["id"]
+    group = client.post("/api/cart/groups", headers=headers, json={}).json()["groups"][0]
+    group_id = group["id"]
+    expected = {"expected_version": group["version"]}
     meal = client.get("/api/meals").json()[0]
-    assert client.patch(f"/api/cart/groups/{group_id}", headers=other, json={}).status_code == 404
+    assert (
+        client.patch(f"/api/cart/groups/{group_id}", headers=other, json=expected).status_code
+        == 404
+    )
     assert client.delete(f"/api/cart/groups/{group_id}", headers=other).status_code == 404
     assert (
         client.post(
@@ -265,13 +284,7 @@ def test_group_ownership_and_invalid_selection(
         client.patch(
             f"/api/cart/groups/{group_id}",
             headers=headers,
-            json={"pickup_date": "2020-01-01", "pickup_slot": "16-18"},
-        ).status_code
-        == 422
-    )
-    assert (
-        client.patch(
-            f"/api/cart/groups/{group_id}", headers=headers, json={"pickup_date": "2020-01-01"}
+            json={**expected, "pickup_date": "2020-01-01", "pickup_slot": "16-18"},
         ).status_code
         == 422
     )
@@ -279,7 +292,15 @@ def test_group_ownership_and_invalid_selection(
         client.patch(
             f"/api/cart/groups/{group_id}",
             headers=headers,
-            json={"pickup_location_id": "00000000-0000-0000-0000-000000000000"},
+            json={**expected, "pickup_date": "2020-01-01"},
+        ).status_code
+        == 422
+    )
+    assert (
+        client.patch(
+            f"/api/cart/groups/{group_id}",
+            headers=headers,
+            json={**expected, "pickup_location_id": "00000000-0000-0000-0000-000000000000"},
         ).status_code
         == 409
     )
@@ -305,7 +326,12 @@ def test_group_move_quantity_overflow_preserves_both_lines(
         client.patch(
             f"/api/cart/items/{item['id']}",
             headers=headers,
-            json={"quantity": 1, "group_id": group_id},
+            json={
+                "quantity": 1,
+                "group_id": group_id,
+                "expected_quantity": 1,
+                "expected_group_id": None,
+            },
         ).status_code
         == 422
     )

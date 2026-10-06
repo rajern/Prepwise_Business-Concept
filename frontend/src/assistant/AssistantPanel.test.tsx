@@ -8,9 +8,100 @@ afterEach(() => {
   cleanup()
   sessionStorage.clear()
   vi.unstubAllGlobals()
+  vi.useRealTimers()
 })
 
 describe('AssistantPanel', () => {
+  it('reuses the same failed request key and original bounded history on an explicit retry', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ code: 'service_unavailable', mutation_status: 'none', retry_safe: true }), { status: 503 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ reply: 'Verified', model: 'offline', response_id: 'id' })))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AssistantPanel accessToken="token" userId="retry-user" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Add one meal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByText('Message failed')
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByText('Verified')
+    const [first, retry] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body as string))
+    expect(first.idempotency_key).toMatch(/^[0-9a-f-]{36}$/)
+    expect(retry).toEqual(first)
+    expect(retry.history).toEqual([])
+    expect(screen.getAllByText('Add one meal')).toHaveLength(1)
+  })
+
+  it('retains an earlier uncertain request key even after another question succeeds', async () => {
+    const fetchMock = vi.fn()
+      .mockRejectedValueOnce(new TypeError('Disconnected'))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ reply: 'Menu answer', model: 'offline', response_id: 'one' })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ reply: 'Recovered original', model: 'offline', response_id: 'two' })))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AssistantPanel accessToken="token" userId="multiple-user" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Add one meal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByRole('alert')
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Show meals' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByText('Menu answer')
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Add one meal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByText('Recovered original')
+    const [first, other, retried] = fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body as string))
+    expect(other.history).toEqual([])
+    expect(other.idempotency_key).not.toBe(first.idempotency_key)
+    expect(retried).toEqual(first)
+  })
+
+  it('retains a confirmed applied mutation marker across a later stream disconnect', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(new TextEncoder().encode('data: {"type":"mutation","mutation_status":"applied","request_id":"request-applied"}\n\n'))
+      controller.close()
+    } }), { headers: { 'Content-Type': 'text/event-stream' } })))
+    render(<AssistantPanel accessToken="token" userId="applied-user" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Add one meal' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Changes were applied.')
+    expect(screen.getByRole('alert')).toHaveTextContent('request-applied')
+    expect(screen.getByLabelText('Message')).toHaveValue('')
+    expect(screen.getByText('Changes applied — check your cart and orders')).toBeInTheDocument()
+  })
+
+  it('does not imply mutation or invite repeating an already completed read-only request', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 'assistant_request_completed', mutation_status: 'none', retry_safe: false }), { status: 409 })))
+    render(<AssistantPanel accessToken="token" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Show meals' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('This message was already processed.')
+    expect(screen.getByRole('alert')).not.toHaveTextContent('changed your cart')
+    expect(screen.getByLabelText('Message')).toHaveValue('')
+  })
+
+  it('unlocks the composer even when the authoritative refresh does not finish', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ reply: 'Done', model: 'offline', response_id: 'id' }))))
+    render(<AssistantPanel accessToken="token" onStateChange={() => new Promise(() => undefined)} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Show meals' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByText('Done')
+    fireEvent.change(screen.getByLabelText('Message'), { target: { value: 'Another question' } })
+    expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled()
+  })
+
+  it('restores a pending request as uncertain without passing it as confirmed history', async () => {
+    sessionStorage.setItem('prepwise-chat', JSON.stringify({ userId: 'pending-user', messages: [{ role: 'user', content: 'Add meal', state: 'pending', requestKey: '11111111-1111-4111-8111-111111111111' }], attempt: { key: '11111111-1111-4111-8111-111111111111', message: 'Add meal', language: 'en', history: [] } }))
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ reply: 'Answer', model: 'offline', response_id: 'id' })))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<AssistantPanel accessToken="token" userId="pending-user" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }))
+    expect(screen.getByText('Outcome uncertain — not a confirmed action')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
+    await screen.findByText('Answer')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ idempotency_key: '11111111-1111-4111-8111-111111111111', history: [] })
+  })
   it('shows streamed text as a draft, stores only confirmation and refreshes the cart', async () => {
     let producer!: ReadableStreamDefaultController<Uint8Array>
     const body = new ReadableStream<Uint8Array>({ start(controller) { producer = controller } })
@@ -89,9 +180,9 @@ describe('AssistantPanel', () => {
         headers: expect.objectContaining({
           Authorization: 'Bearer customer-token',
         }),
-        body: JSON.stringify({ message: 'What can you do?', lang: 'en', history: [] }),
       }),
     )
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({ message: 'What can you do?', lang: 'en', history: [], idempotency_key: expect.any(String) })
   })
 
   it('shows a safe API failure', async () => {
@@ -117,7 +208,7 @@ describe('AssistantPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'The AI assistant is unavailable right now. Please try again.',
+      'The message outcome is uncertain.',
     )
   })
 
@@ -187,7 +278,8 @@ describe('AssistantPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send message' }))
     await screen.findByRole('alert')
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce())
-    expect(screen.getByRole('log')).not.toHaveTextContent('Add one meal')
+    expect(screen.getByRole('log')).toHaveTextContent('Add one meal')
+    expect(screen.getByRole('log')).toHaveTextContent('Outcome uncertain — not a confirmed action')
     expect(screen.getByLabelText('Message')).toHaveValue('Add one meal')
   })
 })

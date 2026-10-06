@@ -110,10 +110,24 @@ accepted. It is untrusted context and cannot replace current-message confirmatio
 There is no extra classifier or moderation-model call. There is no general network
 or MCP approval flow because those capabilities are not exposed. Per-account
 quotas do not stop mass account creation: the global cap is the cost backstop.
-There is no exactly-once HTTP deduplication for cart writes, so a repeated customer
-request can repeat a reversible cart mutation. The single-active lease limits
-concurrency, not duplicate intent. A future request-ID/idempotency design should
-bind the key to user plus request content before enabling more consequential tools.
+The local 2026-10-06 repair adds owner/key/payload-hash replay guards for keyed chat
+requests. A durable pre-write marker commits before any write tool; uncertain/applied
+keys cannot re-execute the workflow. Attempt fencing prevents an expired read-only
+worker from starting a write after replacement. No prompts/replies are stored in the
+receipt and successful replies are not cached/replayed. This conservative design
+may refuse an action that ultimately did not commit: the customer must inspect state.
+Legacy unkeyed callers still have no durable duplicate protection, and a new key can
+repeat the same intent. The single-active lease and guard are not transaction-wide
+atomicity or proof that the model interpreted the customer correctly.
+
+UI checkout separately uses an authoritative reviewed snapshot plus a user-scoped
+idempotency key; replay returns the original order without consuming later cart items.
+Stale item/group edits fail comparison checks rather than overwriting newer state.
+Assistant order confirmation retains its exact phrase/prior-message/expiry rules and
+now binds the full reviewed location, window, bilingual names and cart content.
+Actual SDK multi-round streaming payloads are tested with offline HTTP/SSE fixtures;
+SDK-only parsed fields must not be sent back to the provider. This establishes wire
+compatibility locally, not measured live model reliability or production deployment.
 
 The 800-token cap includes invisible reasoning and visible tool arguments/replies.
 Incomplete provider responses are rejected rather than described as success.

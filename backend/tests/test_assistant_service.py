@@ -211,7 +211,7 @@ def test_service_executes_function_call_and_returns_grounded_follow_up() -> None
         "role": "user",
         "content": "Find meals with at least 40 g protein and below 800 kcal.",
     }
-    assert second_call["input"][1] is function_call
+    assert second_call["input"][1] == function_call.model_dump(mode="json", exclude_unset=True)
     assert second_call["input"][2] == {
         "type": "function_call_output",
         "call_id": "call_123",

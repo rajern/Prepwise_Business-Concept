@@ -23,6 +23,7 @@ RUNTIME_TABLE_PRIVILEGES: dict[str, tuple[str, ...]] = {
     "order_confirmations": ("SELECT", "INSERT", "UPDATE"),
     "assistant_usage_events": ("SELECT", "INSERT", "UPDATE", "DELETE"),
     "assistant_quota_lock": ("SELECT", "INSERT", "UPDATE"),
+    "assistant_requests": ("SELECT", "INSERT", "UPDATE"),
     "knowledge_chunks": ("SELECT",),
     "alembic_version": ("SELECT",),
 }

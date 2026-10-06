@@ -21,12 +21,14 @@ Only tasks marked **Ready** or an unblocked **In progress** may be implemented.
 Continue the active task only while it remains prioritized and its dependencies are satisfied.
 When blocked, record the precise question/action needed and select the next independent Ready task.
 If none exists, stop; do not invent tasks, repeat unchanged failures or reopen completed milestones.
-Only the main agent updates this queue. At most two subagents may work on disjoint subtasks.
+Only the main agent updates this queue. At most two subagents may work on disjoint unattended subtasks.
+The owner explicitly approved three disjoint workers for the interactive architecture-repair
+batch below; this does not expand the nightly worker limit or authorize deployment.
 Never overwrite unrelated changes or start a second worker on an already claimed task.
 
-**Active task:** None; P1–P4 delivered and production-verified on2026-10-01.
-**Next independent task:** None. Do not invent work or repeat exhausted live model evaluations.
-Two workers completed disjoint order backend / customer frontend changes; main agent completed
+**Active task:** AR5 — owner-approved release validation and deployment, 2026-10-06.
+**Next independent task:** None Ready. N8 remains administrator-only. Do not reopen historical completed tasks.
+Historical P1–P4 delivery: two workers completed order backend / customer frontend; main completed
 assistant/catalogue/integration. Baseline worktree was clean at `2ac190c` on main; delivery is
 `281c8b4` with compatible JSON recovery point `ac4cbcd`.
 Legacy-role cleanup N8 is separate from this batch. Owner reported rotating its password;
@@ -34,6 +36,11 @@ do not claim the role was disabled or retry administrator-only operations.
 
 | Priority / ID | Task | Status | Depends on | Completion criteria / blocker |
 | --- | --- | --- | --- | --- |
+| 0 / AR1 | SDK replay and safe chat-request replay | Complete locally, 2026-10-06 | Owner-approved audit fixes | Real AsyncOpenAI/offline HTTP-SSE continuation; SDK parsed fields removed; owner/key/hash receipts, pre-write marker and fenced retries; correlated JSON/SSE outcomes; quota rejection creates no receipt. |
+| 0 / AR2 | Reviewed checkout and cart concurrency | Complete locally, 2026-10-06 | AR3 API integration | Mandatory item/group CAS; authoritative reviewed snapshot, keyed repeat-safe checkout and explicit no-order rejection proof; atomic selected scope; same full snapshot in chat confirmation; PG concurrency regressions pass. |
+| 0 / AR3 | Customer synchronization, time classification and token lifecycle | Complete locally, 2026-10-06 | AR1/AR2 agreed API contracts | History by pickup-window end without false completion; stale-response/draft/clock guards; safe checkout/chat retry receipts; account-bound silent tokens and bounded waits; 75 frontend and 9 browser tests pass. |
+| 0 / AR4 | Integrate, verify and document architecture repairs | Complete locally, 2026-10-06 | AR1–AR3 | Migration/grants/model integration; 220 backend tests including15 real PG cases plus grant-plan metadata check, lint/format/mypy, frontend lint/types/build and redacted scans pass. No commit/push/deploy, production role/secret change or paid call. |
+| 0 / AR5 | Validate and deliver architecture-repair release | In progress: owner approved release, 2026-10-06 | AR1–AR4 | Matching migration/runtime grants/frontend/API; compatible JSON recovery retaining review/CAS/replay guards; approved changed-chunk KB indexing; fresh CI/deploy/exact-SHA production checks. Old rollback targets remain unsafe. |
 | 0a / P1 | Persistent multi-day cart groups and deadline-based cancellation | Complete, deployed2026-10-01 | None | Independent persisted pickup selections, selected-group transactional checkout, others preserved; button cancellation before pickup-day midnight Europe/Oslo; ownership, terminal status, DST and real PG concurrency/migration/runtime-grant checks pass. |
 | 0b / P2 | Customer cart/order/detail UX | Complete, deployed2026-10-01 | P1 API contract | Editable groups, active orders above meals, terminal history navigation, close/switch details with stale guards, accessible meal dialog; bilingual/mobile unit and migrated-PG browser checks pass. |
 | 0c / P3 | Assistant search quality and latency | Complete, deployed2026-10-01; no live quality/latency claim | P1 integration contract | Model/low effort/quotas unchanged; all12 menu items fit default page20 with counts; guarded recipe categories/unknowns, non-narrowing ingredient search, committed authoritative cart-read reuse; SSE drafts/final/error/disconnect/backpressure regressions pass. Only owner-approved changed-chunk embedding work, no new conversational model evaluation. |
@@ -46,6 +53,81 @@ do not claim the role was disabled or retry administrator-only operations.
 | 4 / N4 | Evaluate the selected model with the new 800-token cap | Complete bounded smoke, 2026-09-30 | N3 review | Owner approved max 10 attempts/USD 1. Exactly 10 calls, five synthetic isolated cases passed; estimated USD 0.041908, conservative reservation USD 0.353880. No production data or embeddings. Incomplete handling tested offline; no incomplete live response. [Evidence](docs/AI_EVAL_ROUND2.md). This approval is exhausted; no paid rerun/full eval without new approval. |
 | 5 / N5 | Approve one meal-image sample | Complete, owner-approved 2026-09-30 | None | Owner approved [chicken-teriyaki-v1.png](docs/image-samples/chicken-teriyaki-v1.png): realistic photo, natural light and neutral background. Reuse this sample in the final set. [Prompt and caveats](docs/image-samples/README.md). |
 | 6 / N6 | Generate and integrate the complete meal-image set | Complete, deployed/verified 2026-09-30 | N5, N7 delivery | Eleven native first-attempt images plus reused approved sample; versioned 960 × 720 WebPs, recipe-guarded presentation fallback and NO/EN AI disclosure. Full local tests, six required CI jobs, exact release deployment and public image checks pass. No additional paid model evals or external image API fallback were used. |
+
+### Architecture repair release — 2026-10-06
+
+- Owner explicitly approved completing release prerequisites, then commit/push/deploy.
+  Approval includes changed-chunk embeddings for the revised public order/retry guidance;
+  it does not include paid conversational/image evals, secret changes or database rollback.
+- Fresh read-only production preflight: head `f6a7b8c9d0e1`,12 meals, exact16-table runtime
+  privileges, no privileged role flags/membership/schema CREATE, client TLS. Current14 KB
+  chunks become15:11 unchanged,4 changed/new,0 stale. Existing workflow performs the approved
+  migration, grants and incremental indexing, not ad-hoc local production writes.
+- Added ORM metadata for the existing HNSW knowledge index; freshly migrated local PostgreSQL
+  now passes `alembic check` with no new operations, without dropping/rebuilding that index.
+- Recovery uses a new JSON checkpoint with every review/CAS/receipt/domain/frontend guard intact,
+  followed by a streaming-default-only activation commit. The built JSON image
+  `sha256:f16cacdecedfeaccddb9f63b369d1470a994c5b0668a49ee9b17b591f02d1fb7`
+  passed the offline migrated-PG drill in `scripts/recovery-image-drill.py`: cancelled keyed-order
+  replay returns the original order, preserves other groups/newer cart, JSON fallback responds,
+  and committed partial chat writes block replay. Zero provider calls; no production rollback drill.
+- Backend222 tests and frontend75 tests pass; lint/format/strict types and frontend build pass.
+  All9 browser scenarios pass against the migrated local PostgreSQL API; Docker image and
+  Bicep compilation pass. Redacted Gitleaks history (66 commits) and current known source/docs/
+  untracked scripts pass. Exact-SHA CI/deploy/production validation is still in progress.
+  `scripts/release-readonly.py` checks safe production metadata in a read-only transaction and
+  never prints credentials/customer records. The unchanged legacy login is still N8.
+
+### Architecture repair batch — 2026-10-06 (initial local-only approval)
+
+- Owner approved one interactive batch: main plus three non-overlapping workers. Baseline
+  clean main `013b741`; serving release remains `281c8b4`. Local implementation/testing only.
+- Scope: audit P1 SDK payload, partial-write/retry safety, reviewed checkout, stale cart
+  updates and dated order classification; adjacent synchronization, atomic selected-scope
+  checkout, token lifecycle and offline integration regressions. No new model/infrastructure.
+- Agreed HTTP contracts: item PATCH requires original quantity and group; pickup group PATCH
+  requires the server selection version. `/api/orders/review` returns authoritative lines,
+  total/location/window and a state fingerprint; order POST requires that fingerprint plus
+  an owner-scoped idempotency key. UI null-group checkout consumes only unassigned items even
+  beside named groups; assistant legacy multi-group confirmation remains rejected.
+- Keyed chat requests persist only payload hashes, attempt/safety state and timing metadata,
+  not prompts/replies. A committed pre-write marker prevents replay after an uncertain outcome;
+  retrying is not a transaction-wide rollback or a guarantee of model interpretation.
+- Main owns migrations, shared model registration/grants, documentation and integration.
+  Workers own assistant backend, order/cart backend, and frontend respectively.
+- Final local evidence: all220 backend tests pass, with15 actual PostgreSQL quota/guard/cart/
+  grant/migration cases plus the grant-plan metadata check (no skips); all75 frontend tests, lint/types/build and all9 browser
+  scenarios pass. Critical real-domain flows use a freshly migrated/seeded loopback PG API;
+  layout/image browser cases and the chat provider are mocked. Actual SDK HTTP/SSE continuation
+  is tested with MockTransport, not a paid provider. No claim of live model quality/latency.
+- Migration `a7b8c9d0e1f2` applied successfully to the disposable DB. A private-schema regression
+  proves receipt/keyed-order downgrade refusal and safe empty-fixture downgrade; runtime can
+  insert/update receipts but cannot delete/truncate them. This is not a production rollback drill.
+- Final integration also preserves an uncertain checkout across auth/network errors; only an
+  explicit `checkout_not_created` proof after locked key lookup permits a fresh purchase key.
+  Locale changes during writes trigger fresh reads, and refresh timeout leaves an error instead
+  of an endless loading state. Failed chat attempts retain original keys even after another turn.
+- Cleanup: own loopback API and Playwright server stopped; only identity-validated
+  `prepwise-architect-test-20261006` was stopped/auto-removed with its disposable test data.
+  No listener remains on test ports8000/3000. Docker Desktop/cached images and all other user
+  processes/data were preserved. Production remains unchanged; no paid model/embedding call.
+- Redacted Gitleaks scan: all66 Git commits and current source/tests/migrations/docs (including
+  untracked additions) pass; ignored local environment files were not mounted. Diff whitespace,
+  backend Ruff/format/mypy and frontend lint/typecheck pass. Frontend build has a non-failing
+  ~500KB chunk warning; existing dependency deprecation warnings are not treated as test failures.
+- Generic `alembic check` reports only the pre-existing migration-created HNSW knowledge index
+  absent from ORM index metadata (`ix_knowledge_chunks_embedding_hnsw`); no new receipt/order
+  drift was detected, and dedicated real migration checks pass. Do not drop the vector index
+  to silence this report. Resolve/document that parity before claiming a fully clean schema check.
+- Deferred audit items: stronger deterministic cart-intent confirmation (product decision),
+  async DB/resource/pagination architecture, broad admin-editor concurrency, dependency lock
+  and production smoke/alert redesign. Legacy-role N8 remains administrator-only; audit verified
+  `prepwise_app` still allows login. Do not alter secrets/roles or claim rotation disabled it.
+- Release authorization is NOT included in this batch. Existing production stays unchanged;
+  schema/client compatibility and fresh release gates must be reviewed before any later push.
+  Knowledge-base order guidance remains unchanged and predates time-based history presentation;
+  AR5 must reconcile the source/index and approve paid changed-chunk work before release.
+  Do not index or initiate paid calls under this local implementation approval.
 
 ### Customer-experience release retry — 2026-10-01
 

@@ -5,10 +5,11 @@ import {
   InteractionStatus,
 } from '@azure/msal-browser'
 import { useIsAuthenticated, useMsal } from '@azure/msal-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import { fetchCurrentUser, type CurrentUser } from '../api/me'
 import { acquireApiAccessToken, createLoginRequest } from './token'
+import { bindApiToken } from './authenticatedFetch'
 import { reportAuthError } from './diagnostics'
 import { useLanguage } from '../i18n'
 
@@ -117,6 +118,7 @@ function SignedInControls({
   const { t } = useLanguage()
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>('loading')
   const [interactionError, setInteractionError] = useState(false)
+  const releaseBinding = useRef<(() => void) | undefined>(undefined)
 
   useEffect(() => {
     if (interactionInProgress) {
@@ -124,14 +126,22 @@ function SignedInControls({
     }
 
     let cancelled = false
+    let unbind: (() => void) | undefined
 
     onAccessTokenChange?.(null)
     onCurrentUserChange?.(null)
     void acquireApiAccessToken(instance, account, apiScope)
-      .then(async (accessToken) => ({
-        accessToken,
-        user: await fetchCurrentUser(accessToken),
-      }))
+      .then(async (accessToken) => {
+        if (cancelled) throw new DOMException('Aborted', 'AbortError')
+        unbind = bindApiToken(accessToken, async () => {
+          try { return await acquireApiAccessToken(instance, account, apiScope) } catch (reason) {
+            if (!cancelled && reason instanceof InteractionRequiredAuthError) setTokenStatus('interaction-required')
+            throw reason
+          }
+        })
+        releaseBinding.current = unbind
+        return { accessToken, user: await fetchCurrentUser(accessToken) }
+      })
       .then(({ accessToken, user }) => {
         if (!cancelled) {
           setTokenStatus('ready')
@@ -149,12 +159,17 @@ function SignedInControls({
             ? 'interaction-required'
             : 'error',
         )
+        unbind?.()
         onAccessTokenChange?.(null)
         onCurrentUserChange?.(null)
       })
 
     return () => {
       cancelled = true
+      unbind?.()
+      // Account removal/switch outside our sign-out button must also clear private UI state.
+      onAccessTokenChange?.(null)
+      onCurrentUserChange?.(null)
     }
   }, [
     account,
@@ -179,6 +194,7 @@ function SignedInControls({
   }
 
   function signOut() {
+    releaseBinding.current?.()
     onAccessTokenChange?.(null)
     onCurrentUserChange?.(null)
     setInteractionError(false)

@@ -26,7 +26,15 @@ from prepwise_api.api.admin_pickup_locations import (
 from prepwise_api.auth import AccessTokenClaims, get_current_user, require_admin
 from prepwise_api.config import Settings
 from prepwise_api.knowledge import KnowledgeRetriever
-from prepwise_api.models import Allergen, AssistantUsageEvent, Base, KnowledgeChunk, User, UserRole
+from prepwise_api.models import (
+    Allergen,
+    AssistantRequest,
+    AssistantUsageEvent,
+    Base,
+    KnowledgeChunk,
+    User,
+    UserRole,
+)
 from prepwise_api.models.enums import OrderStatus
 from prepwise_api.models.knowledge import KNOWLEDGE_EMBEDDING_DIMENSIONS
 from prepwise_api.runtime_permissions import RUNTIME_TABLE_PRIVILEGES, apply_runtime_grants
@@ -45,6 +53,7 @@ from prepwise_api.services.orders import (
     confirm_user_order,
     create_user_order,
     prepare_user_order_confirmation,
+    review_user_order,
 )
 from prepwise_api.services.pickup_schedule import list_pickup_options
 
@@ -202,8 +211,17 @@ def test_runtime_grants_support_real_application_flows(
     )
     assert updated.status == OrderStatus.PREPARING
     add_user_cart_item(session, user.id, meal.id, 1)
-    checkout = create_user_order(
+    review = review_user_order(
         session, user.id, location.id, pickup_date=day.date, pickup_slot="18-20"
+    )
+    checkout = create_user_order(
+        session,
+        user.id,
+        location.id,
+        pickup_date=day.date,
+        pickup_slot="18-20",
+        review_fingerprint=review.review_fingerprint,
+        idempotency_key=uuid4(),
     )
     assert checkout.items[0].meal_id == meal.id
 
@@ -230,6 +248,27 @@ def test_runtime_grants_support_real_application_flows(
     release_assistant_request(session, event_id)
     event = session.get(AssistantUsageEvent, event_id)
     assert event is not None and event.released_at is not None
+    # The runtime can persist replay guards, but cannot erase them to bypass safety.
+    from datetime import UTC, datetime, timedelta
+
+    started_at = datetime.now(UTC)
+    receipt = AssistantRequest(
+        user_id=user.id,
+        idempotency_key=uuid4(),
+        payload_hash="1" * 64,
+        first_request_id="grant-test",
+        attempt_id=uuid4(),
+        state="running",
+        mutation_status="none",
+        started_at=started_at,
+        lease_expires_at=started_at + timedelta(seconds=60),
+    )
+    session.add(receipt)
+    session.commit()
+    receipt.mutation_status = "unknown"
+    session.commit()
+    saved_receipt = session.get(AssistantRequest, receipt.id)
+    assert saved_receipt is not None and saved_receipt.mutation_status == "unknown"
     matches = asyncio.run(
         KnowledgeRetriever(_LocalEmbeddingProvider()).retrieve(session, "When is pickup?")
     )
@@ -278,6 +317,8 @@ def test_runtime_grants_deny_escalation_and_out_of_scope_writes(
         f'CREATE TABLE "{schema}".unauthorized (id integer)',
         f'ALTER TABLE "{schema}".meals ADD COLUMN unauthorized integer',
         f'TRUNCATE "{schema}".assistant_usage_events',
+        f'TRUNCATE "{schema}".assistant_requests',
+        f'DELETE FROM "{schema}".assistant_requests',
         f'DELETE FROM "{schema}".users',
         f"UPDATE \"{schema}\".users SET role = 'admin'",
         f'DELETE FROM "{schema}".orders',

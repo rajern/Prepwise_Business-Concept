@@ -204,6 +204,7 @@ class AssistantService:
         request_id: str,
         tool_context: AssistantToolContext,
         on_event: AssistantEventCallback | None = None,
+        stream_output: bool = True,
     ) -> AssistantReply:
         if not self._settings.assistant_enabled:
             raise AssistantUnavailableError
@@ -218,6 +219,7 @@ class AssistantService:
                         request_id=request_id,
                         tool_context=tool_context,
                         on_event=on_event,
+                        stream_output=stream_output,
                     )
         except TimeoutError as error:
             raise AssistantTimeoutError from error
@@ -229,6 +231,7 @@ class AssistantService:
         request_id: str,
         tool_context: AssistantToolContext,
         on_event: AssistantEventCallback | None = None,
+        stream_output: bool = True,
     ) -> AssistantReply:
         model = self._settings.openai_model
         tools = cast(
@@ -299,7 +302,7 @@ class AssistantService:
                                     client,
                                     budget,
                                     token_reservation,
-                                    on_event=on_event,
+                                    on_event=on_event if stream_output else None,
                                     model=model,
                                     reasoning={"effort": self._settings.openai_reasoning_effort},
                                     instructions=instructions,
@@ -341,7 +344,7 @@ class AssistantService:
                         if not function_calls:
                             verification_tool = workflow.required_verification_tool
                             if verification_tool is not None:
-                                input_items.extend(response.output)
+                                input_items.extend(_response_input_items(response))
                                 tool_choice = {"type": "function", "name": verification_tool}
                                 workflow.record_forced_verification()
                                 continue
@@ -350,7 +353,7 @@ class AssistantService:
                             raise AssistantUnavailableError
                         tool_call_count += len(function_calls)
 
-                        input_items.extend(response.output)
+                        input_items.extend(_response_input_items(response))
                         if on_event is not None:
                             await on_event({"type": "reset"})
                         for function_call in function_calls:
@@ -393,6 +396,15 @@ class AssistantService:
                                             and workflow.write_call_count >= _MAX_WRITE_CALLS
                                         ):
                                             raise AssistantUnavailableError
+                                        if (
+                                            operation is AssistantToolOperation.WRITE
+                                            and on_event is not None
+                                        ):
+                                            # The API observer durably records this BEFORE
+                                            # the independently committing tool is invoked.
+                                            await on_event(
+                                                {"type": "mutation", "mutation_status": "unknown"}
+                                            )
                                         if function_call.name == self._knowledge_tool.name:
                                             output = await self._knowledge_tool.execute_json(
                                                 function_call.arguments,
@@ -403,6 +415,14 @@ class AssistantService:
                                                 function_call.name,
                                                 function_call.arguments,
                                                 tool_context,
+                                            )
+                                        if (
+                                            operation is AssistantToolOperation.WRITE
+                                            and on_event is not None
+                                            and json.loads(output).get("ok") is True
+                                        ):
+                                            await on_event(
+                                                {"type": "mutation", "mutation_status": "applied"}
                                             )
                                     workflow.record_tool_result(
                                         function_call.name,
@@ -595,6 +615,32 @@ class AssistantService:
 
 def _function_calls(response: Response) -> list[ResponseFunctionToolCall]:
     return [item for item in response.output if isinstance(item, ResponseFunctionToolCall)]
+
+
+def _response_input_items(response: Response) -> list[object]:
+    """Replay API output, not the SDK's local parsed helper fields.
+
+    Async SDK transformation does not consistently honor __api_exclude__ on
+    ParsedResponseFunctionToolCall. Serializing to plain API dictionaries also
+    removes ParsedResponseOutputText.parsed while preserving reasoning, IDs,
+    tool arguments and every other provider field needed for continuation.
+    """
+
+    def clean(value: object) -> object:
+        if isinstance(value, list):
+            return [clean(item) for item in value]
+        if isinstance(value, dict):
+            excluded = (
+                {"parsed_arguments"}
+                if value.get("type") == "function_call"
+                else {"parsed"}
+                if value.get("type") == "output_text"
+                else set()
+            )
+            return {key: clean(item) for key, item in value.items() if key not in excluded}
+        return value
+
+    return [clean(item.model_dump(mode="json", exclude_unset=True)) for item in response.output]
 
 
 @contextmanager

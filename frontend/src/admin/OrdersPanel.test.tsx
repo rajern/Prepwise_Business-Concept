@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { OrdersPanel } from './OrdersPanel'
@@ -36,6 +36,24 @@ afterEach(() => {
 })
 
 describe('OrdersPanel', () => {
+  it('keeps order B selected when the older order A detail resolves last', async () => {
+    let first!: (value: unknown) => void
+    const other = { ...detail, id: 'order-b', customer_display_name: 'Second customer', items: [{ ...detail.items[0], meal_name: 'Second meal' }] }
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) => {
+      const path = input.toString()
+      if (path === '/api/admin/orders') return { ok: true, json: async () => [order, other] }
+      if (path.endsWith('/order-b')) return { ok: true, json: async () => other }
+      return new Promise((resolve) => { first = resolve })
+    }))
+    render(<OrdersPanel accessToken="admin-token" />)
+    await screen.findByRole('heading', { name: 'Second customer' })
+    fireEvent.click(screen.getAllByRole('button', { name: 'Inspect' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: 'Inspect' })[1])
+    await screen.findByText('2 × Second meal')
+    await act(async () => { first({ ok: true, json: async () => detail }) })
+    expect(screen.queryByText('2 × Test meal')).not.toBeInTheDocument()
+    expect(screen.getByText('2 × Second meal')).toBeInTheDocument()
+  })
   it('inspects an order and advances it by one valid status', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const path = input.toString()

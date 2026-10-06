@@ -12,6 +12,8 @@ export class ApiRequestError extends Error {
     public readonly requestId: string | null,
     public readonly validationIssues: ApiValidationIssue[],
     public readonly retryAfter: number | null = null,
+    public readonly mutationStatus: 'none' | 'unknown' | 'applied' = 'unknown',
+    public readonly retrySafe: boolean = false,
   ) {
     super(detail ?? `API request failed with status ${status}`)
     this.name = 'ApiRequestError'
@@ -23,12 +25,16 @@ export async function apiRequestError(response: Response): Promise<ApiRequestErr
   let detail: string | null = null
   let requestId: string | null = response.headers?.get?.('X-Request-ID') ?? null
   let validationIssues: ApiValidationIssue[] = []
+  let mutationStatus: 'none' | 'unknown' | 'applied' = 'unknown'
+  let retrySafe = false
 
   try {
     const body = (await response.json()) as Record<string, unknown>
     code = typeof body.code === 'string' ? body.code : null
     detail = typeof body.detail === 'string' ? body.detail : null
     requestId = typeof body.request_id === 'string' ? body.request_id : requestId
+    if (body.mutation_status === 'none' || body.mutation_status === 'unknown' || body.mutation_status === 'applied') mutationStatus = body.mutation_status
+    retrySafe = body.retry_safe === true
     validationIssues = Array.isArray(body.errors)
       ? body.errors.flatMap((candidate) => {
           if (!candidate || typeof candidate !== 'object') {
@@ -59,6 +65,8 @@ export async function apiRequestError(response: Response): Promise<ApiRequestErr
     requestId,
     validationIssues,
     parseRetryAfter(response.headers?.get?.('Retry-After')),
+    mutationStatus,
+    retrySafe,
   )
 }
 
